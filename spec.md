@@ -1,24 +1,25 @@
-# Office Navigator
+# Workplace Compass
 
 ## Current State
-New project, no existing code.
+The app has a Motoko backend with `getCallerUserProfile` and `saveCallerUserProfile` endpoints that store a `UserProfile { name: Text }` per user. The frontend header shows the truncated principal ID in the user dropdown. There is no UI to set or display a profile name.
 
 ## Requested Changes (Diff)
 
 ### Add
-- A landing/home page with a hero section explaining the tool
-- A problem input form where users describe their office scenario or problem statement
-- A suggestion engine (rule/pattern-based on the backend) that categorizes scenarios and returns structured navigation advice
-- A results view displaying actionable suggestions, tips, and recommended next steps
-- A history of recent submissions (stored in backend) so users can revisit past scenarios
-- Category tagging (e.g. conflict resolution, communication, escalation, workload, feedback)
+- A query hook `useGetCallerUserProfile` that fetches the user's saved profile name on login.
+- A mutation hook `useSaveCallerUserProfile` for saving the profile name.
+- A "Set your name" inline prompt or small dialog that appears when the user is authenticated but has no name set yet.
+- Header greeting: show "Hi, [Name]" if name is set, otherwise show a subtle prompt to set a name.
 
 ### Modify
-N/A
+- Header user button: replace truncated principal ID with the user's name (or a fallback "Set name" link if no name).
+- User dropdown: add a "Edit Name" option above Sign Out.
 
 ### Remove
-N/A
+- Nothing removed.
 
 ## Implementation Plan
-1. Backend: Store submitted scenarios with category + suggestions. Implement a pattern-matching suggestion engine in Motoko that maps keywords/themes to office navigation advice.
-2. Frontend: Landing page with hero, problem input textarea, category selector (optional), submit button, results panel with suggestions list, history sidebar or section.
+1. Add `useGetCallerUserProfile` and `useSaveCallerUserProfile` hooks in `useQueries.ts`.
+2. Update `MainApp` to fetch profile after login and pass name down.
+3. Update header user button to show name or "Set name" prompt.
+4. Add a small inline Dialog for entering/editing the display name, triggered from the header dropdown.

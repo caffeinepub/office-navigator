@@ -3,8 +3,18 @@ import Array "mo:core/Array";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
 import Time "mo:core/Time";
+import Principal "mo:core/Principal";
+import Map "mo:core/Map";
+import Runtime "mo:core/Runtime";
+import AccessControl "authorization/access-control";
+import MixinAuthorization "authorization/MixinAuthorization";
+
+
 
 actor {
+  let accessControlState = AccessControl.initState();
+  include MixinAuthorization(accessControlState);
+
   type Category = {
     #conflict;
     #communication;
@@ -21,8 +31,36 @@ actor {
     suggestions : [Text];
   };
 
+  public type UserProfile = {
+    name : Text;
+  };
+
   let MAX_SUBMISSIONS = 20;
-  let submissions = List.empty<Scenario>();
+
+  let userSubmissions = Map.empty<Principal, List.List<Scenario>>();
+
+  let userProfiles = Map.empty<Principal, UserProfile>();
+
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can access profiles");
+    };
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller, profile);
+  };
 
   func getCategorySuggestions(category : Category) : [Text] {
     switch (category) {
@@ -114,6 +152,10 @@ actor {
   };
 
   public shared ({ caller }) func submitScenario(text : Text, category : ?Category) : async [Text] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can submit scenarios");
+    };
+
     let timestamp = Time.now();
     let suggestions = analyzeTextForKeywords(text, category);
 
@@ -124,16 +166,29 @@ actor {
       suggestions;
     };
 
+    let submissions = switch (userSubmissions.get(caller)) {
+      case (?list) { list };
+      case (null) { List.empty<Scenario>() };
+    };
+
     submissions.add(scenario);
 
     while (submissions.size() > MAX_SUBMISSIONS) {
       ignore submissions.removeLast();
     };
 
+    userSubmissions.add(caller, submissions);
+
     suggestions;
   };
 
   public query ({ caller }) func getRecentSubmissions() : async [Scenario] {
-    submissions.values().toArray();
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can retrieve submissions");
+    };
+    switch (userSubmissions.get(caller)) {
+      case (?submissions) { submissions.values().toArray() };
+      case (null) { [] };
+    };
   };
 };

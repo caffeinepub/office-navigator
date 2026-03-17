@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Category, type Scenario } from "../backend.d";
+import { Category, type Scenario, type UserProfile } from "../backend.d";
 import { useActor } from "./useActor";
+import { useAuthState } from "./useAuthState";
 
 export function useGetRecentSubmissions() {
   const { actor, isFetching } = useActor();
@@ -30,6 +31,34 @@ export function useSubmitScenario() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recentSubmissions"] });
+    },
+  });
+}
+
+export function useGetCallerUserProfile() {
+  const { actor, isFetching } = useActor();
+  const { isAuthenticated } = useAuthState();
+  return useQuery<UserProfile | null>({
+    queryKey: ["callerUserProfile"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getCallerUserProfile();
+    },
+    enabled: !!actor && !isFetching && isAuthenticated,
+  });
+}
+
+export function useSaveCallerUserProfile() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, UserProfile>({
+    mutationFn: async (profile) => {
+      if (!actor) throw new Error("Actor not ready");
+      return actor.saveCallerUserProfile(profile);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["callerUserProfile"] });
     },
   });
 }

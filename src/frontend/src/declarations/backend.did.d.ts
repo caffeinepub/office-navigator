@@ -23,8 +23,19 @@ export interface Scenario {
   'category' : [] | [Category],
 }
 export type Time = bigint;
+export interface UserProfile { 'name' : string }
+export type UserRole = { 'admin' : null } |
+  { 'user' : null } |
+  { 'guest' : null };
 export interface _SERVICE {
+  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getRecentSubmissions' : ActorMethod<[], Array<Scenario>>,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'submitScenario' : ActorMethod<[string, [] | [Category]], Array<string>>,
 }
 export declare const idlService: IDL.ServiceClass;
