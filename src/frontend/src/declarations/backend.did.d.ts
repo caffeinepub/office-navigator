@@ -10,17 +10,18 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export type Category = { 'communication' : null } |
-  { 'workload' : null } |
-  { 'conflict' : null } |
-  { 'feedback' : null } |
-  { 'general' : null } |
-  { 'escalation' : null };
+export type MatrixType = { 'perceptionMindset' : null } |
+  { 'careerGrowth' : null } |
+  { 'behaviorActionable' : null };
+export type MatrixWho = { 'systemOrg' : null } |
+  { 'peerTeam' : null } |
+  { 'leaderManager' : null };
 export interface Scenario {
+  'who' : [] | [MatrixWho],
   'suggestions' : Array<string>,
   'text' : string,
+  'challengeType' : [] | [MatrixType],
   'timestamp' : Time,
-  'category' : [] | [Category],
 }
 export type Time = bigint;
 export interface UserProfile { 'name' : string }
@@ -36,7 +37,10 @@ export interface _SERVICE {
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'submitScenario' : ActorMethod<[string, [] | [Category]], Array<string>>,
+  'submitScenario' : ActorMethod<
+    [string, [] | [MatrixWho], [] | [MatrixType]],
+    Array<string>
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

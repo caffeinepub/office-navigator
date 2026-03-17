@@ -14,20 +14,23 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
-export const Time = IDL.Int;
-export const Category = IDL.Variant({
-  'communication' : IDL.Null,
-  'workload' : IDL.Null,
-  'conflict' : IDL.Null,
-  'feedback' : IDL.Null,
-  'general' : IDL.Null,
-  'escalation' : IDL.Null,
+export const MatrixWho = IDL.Variant({
+  'systemOrg' : IDL.Null,
+  'peerTeam' : IDL.Null,
+  'leaderManager' : IDL.Null,
 });
+export const MatrixType = IDL.Variant({
+  'perceptionMindset' : IDL.Null,
+  'careerGrowth' : IDL.Null,
+  'behaviorActionable' : IDL.Null,
+});
+export const Time = IDL.Int;
 export const Scenario = IDL.Record({
+  'who' : IDL.Opt(MatrixWho),
   'suggestions' : IDL.Vec(IDL.Text),
   'text' : IDL.Text,
+  'challengeType' : IDL.Opt(MatrixType),
   'timestamp' : Time,
-  'category' : IDL.Opt(Category),
 });
 
 export const idlService = IDL.Service({
@@ -44,7 +47,7 @@ export const idlService = IDL.Service({
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'submitScenario' : IDL.Func(
-      [IDL.Text, IDL.Opt(Category)],
+      [IDL.Text, IDL.Opt(MatrixWho), IDL.Opt(MatrixType)],
       [IDL.Vec(IDL.Text)],
       [],
     ),
@@ -59,20 +62,23 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
-  const Time = IDL.Int;
-  const Category = IDL.Variant({
-    'communication' : IDL.Null,
-    'workload' : IDL.Null,
-    'conflict' : IDL.Null,
-    'feedback' : IDL.Null,
-    'general' : IDL.Null,
-    'escalation' : IDL.Null,
+  const MatrixWho = IDL.Variant({
+    'systemOrg' : IDL.Null,
+    'peerTeam' : IDL.Null,
+    'leaderManager' : IDL.Null,
   });
+  const MatrixType = IDL.Variant({
+    'perceptionMindset' : IDL.Null,
+    'careerGrowth' : IDL.Null,
+    'behaviorActionable' : IDL.Null,
+  });
+  const Time = IDL.Int;
   const Scenario = IDL.Record({
+    'who' : IDL.Opt(MatrixWho),
     'suggestions' : IDL.Vec(IDL.Text),
     'text' : IDL.Text,
+    'challengeType' : IDL.Opt(MatrixType),
     'timestamp' : Time,
-    'category' : IDL.Opt(Category),
   });
   
   return IDL.Service({
@@ -89,7 +95,7 @@ export const idlFactory = ({ IDL }) => {
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'submitScenario' : IDL.Func(
-        [IDL.Text, IDL.Opt(Category)],
+        [IDL.Text, IDL.Opt(MatrixWho), IDL.Opt(MatrixType)],
         [IDL.Vec(IDL.Text)],
         [],
       ),

@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Category, type Scenario, type UserProfile } from "../backend.d";
+import {
+  MatrixType,
+  MatrixWho,
+  type Scenario,
+  type UserProfile,
+} from "../backend.d";
 import { useActor } from "./useActor";
 import { useAuthState } from "./useAuthState";
+
+export { MatrixWho, MatrixType };
 
 export function useGetRecentSubmissions() {
   const { actor, isFetching } = useActor();
@@ -23,11 +30,11 @@ export function useSubmitScenario() {
   return useMutation<
     string[],
     Error,
-    { text: string; category: Category | null }
+    { text: string; who: MatrixWho | null; challengeType: MatrixType | null }
   >({
-    mutationFn: async ({ text, category }) => {
+    mutationFn: async ({ text, who, challengeType }) => {
       if (!actor) throw new Error("Actor not ready");
-      return actor.submitScenario(text, category);
+      return actor.submitScenario(text, who, challengeType);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recentSubmissions"] });
@@ -62,5 +69,3 @@ export function useSaveCallerUserProfile() {
     },
   });
 }
-
-export { Category };

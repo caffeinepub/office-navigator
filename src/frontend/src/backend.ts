@@ -94,18 +94,21 @@ export interface UserProfile {
     name: string;
 }
 export interface Scenario {
+    who?: MatrixWho;
     suggestions: Array<string>;
     text: string;
+    challengeType?: MatrixType;
     timestamp: Time;
-    category?: Category;
 }
-export enum Category {
-    communication = "communication",
-    workload = "workload",
-    conflict = "conflict",
-    feedback = "feedback",
-    general = "general",
-    escalation = "escalation"
+export enum MatrixType {
+    perceptionMindset = "perceptionMindset",
+    careerGrowth = "careerGrowth",
+    behaviorActionable = "behaviorActionable"
+}
+export enum MatrixWho {
+    systemOrg = "systemOrg",
+    peerTeam = "peerTeam",
+    leaderManager = "leaderManager"
 }
 export enum UserRole {
     admin = "admin",
@@ -121,9 +124,9 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    submitScenario(text: string, category: Category | null): Promise<Array<string>>;
+    submitScenario(text: string, who: MatrixWho | null, challengeType: MatrixType | null): Promise<Array<string>>;
 }
-import type { Category as _Category, Scenario as _Scenario, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { MatrixType as _MatrixType, MatrixWho as _MatrixWho, Scenario as _Scenario, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -238,22 +241,25 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async submitScenario(arg0: string, arg1: Category | null): Promise<Array<string>> {
+    async submitScenario(arg0: string, arg1: MatrixWho | null, arg2: MatrixType | null): Promise<Array<string>> {
         if (this.processError) {
             try {
-                const result = await this.actor.submitScenario(arg0, to_candid_opt_n12(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.submitScenario(arg0, to_candid_opt_n15(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.submitScenario(arg0, to_candid_opt_n12(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.submitScenario(arg0, to_candid_opt_n15(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2));
             return result;
         }
     }
 }
-function from_candid_Category_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Category): Category {
+function from_candid_MatrixType_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _MatrixType): MatrixType {
+    return from_candid_variant_n14(_uploadFile, _downloadFile, value);
+}
+function from_candid_MatrixWho_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _MatrixWho): MatrixWho {
     return from_candid_variant_n11(_uploadFile, _downloadFile, value);
 }
 function from_candid_Scenario_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Scenario): Scenario {
@@ -262,44 +268,53 @@ function from_candid_Scenario_n7(_uploadFile: (file: ExternalBlob) => Promise<Ui
 function from_candid_UserRole_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
     return from_candid_variant_n5(_uploadFile, _downloadFile, value);
 }
+function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_MatrixType]): MatrixType | null {
+    return value.length === 0 ? null : from_candid_MatrixType_n13(_uploadFile, _downloadFile, value[0]);
+}
 function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Category]): Category | null {
-    return value.length === 0 ? null : from_candid_Category_n10(_uploadFile, _downloadFile, value[0]);
+function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_MatrixWho]): MatrixWho | null {
+    return value.length === 0 ? null : from_candid_MatrixWho_n10(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    who: [] | [_MatrixWho];
     suggestions: Array<string>;
     text: string;
+    challengeType: [] | [_MatrixType];
     timestamp: _Time;
-    category: [] | [_Category];
 }): {
+    who?: MatrixWho;
     suggestions: Array<string>;
     text: string;
+    challengeType?: MatrixType;
     timestamp: Time;
-    category?: Category;
 } {
     return {
+        who: record_opt_to_undefined(from_candid_opt_n9(_uploadFile, _downloadFile, value.who)),
         suggestions: value.suggestions,
         text: value.text,
-        timestamp: value.timestamp,
-        category: record_opt_to_undefined(from_candid_opt_n9(_uploadFile, _downloadFile, value.category))
+        challengeType: record_opt_to_undefined(from_candid_opt_n12(_uploadFile, _downloadFile, value.challengeType)),
+        timestamp: value.timestamp
     };
 }
 function from_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    communication: null;
+    systemOrg: null;
 } | {
-    workload: null;
+    peerTeam: null;
 } | {
-    conflict: null;
+    leaderManager: null;
+}): MatrixWho {
+    return "systemOrg" in value ? MatrixWho.systemOrg : "peerTeam" in value ? MatrixWho.peerTeam : "leaderManager" in value ? MatrixWho.leaderManager : value;
+}
+function from_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    perceptionMindset: null;
 } | {
-    feedback: null;
+    careerGrowth: null;
 } | {
-    general: null;
-} | {
-    escalation: null;
-}): Category {
-    return "communication" in value ? Category.communication : "workload" in value ? Category.workload : "conflict" in value ? Category.conflict : "feedback" in value ? Category.feedback : "general" in value ? Category.general : "escalation" in value ? Category.escalation : value;
+    behaviorActionable: null;
+}): MatrixType {
+    return "perceptionMindset" in value ? MatrixType.perceptionMindset : "careerGrowth" in value ? MatrixType.careerGrowth : "behaviorActionable" in value ? MatrixType.behaviorActionable : value;
 }
 function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
@@ -313,40 +328,34 @@ function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uin
 function from_candid_vec_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Scenario>): Array<Scenario> {
     return value.map((x)=>from_candid_Scenario_n7(_uploadFile, _downloadFile, x));
 }
-function to_candid_Category_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Category): _Category {
-    return to_candid_variant_n14(_uploadFile, _downloadFile, value);
+function to_candid_MatrixType_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixType): _MatrixType {
+    return to_candid_variant_n20(_uploadFile, _downloadFile, value);
+}
+function to_candid_MatrixWho_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixWho): _MatrixWho {
+    return to_candid_variant_n17(_uploadFile, _downloadFile, value);
 }
 function to_candid_UserRole_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n2(_uploadFile, _downloadFile, value);
 }
-function to_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Category | null): [] | [_Category] {
-    return value === null ? candid_none() : candid_some(to_candid_Category_n13(_uploadFile, _downloadFile, value));
+function to_candid_opt_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixWho | null): [] | [_MatrixWho] {
+    return value === null ? candid_none() : candid_some(to_candid_MatrixWho_n16(_uploadFile, _downloadFile, value));
 }
-function to_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Category): {
-    communication: null;
+function to_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixType | null): [] | [_MatrixType] {
+    return value === null ? candid_none() : candid_some(to_candid_MatrixType_n19(_uploadFile, _downloadFile, value));
+}
+function to_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixWho): {
+    systemOrg: null;
 } | {
-    workload: null;
+    peerTeam: null;
 } | {
-    conflict: null;
-} | {
-    feedback: null;
-} | {
-    general: null;
-} | {
-    escalation: null;
+    leaderManager: null;
 } {
-    return value == Category.communication ? {
-        communication: null
-    } : value == Category.workload ? {
-        workload: null
-    } : value == Category.conflict ? {
-        conflict: null
-    } : value == Category.feedback ? {
-        feedback: null
-    } : value == Category.general ? {
-        general: null
-    } : value == Category.escalation ? {
-        escalation: null
+    return value == MatrixWho.systemOrg ? {
+        systemOrg: null
+    } : value == MatrixWho.peerTeam ? {
+        peerTeam: null
+    } : value == MatrixWho.leaderManager ? {
+        leaderManager: null
     } : value;
 }
 function to_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
@@ -362,6 +371,21 @@ function to_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8
         user: null
     } : value == UserRole.guest ? {
         guest: null
+    } : value;
+}
+function to_candid_variant_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: MatrixType): {
+    perceptionMindset: null;
+} | {
+    careerGrowth: null;
+} | {
+    behaviorActionable: null;
+} {
+    return value == MatrixType.perceptionMindset ? {
+        perceptionMindset: null
+    } : value == MatrixType.careerGrowth ? {
+        careerGrowth: null
+    } : value == MatrixType.behaviorActionable ? {
+        behaviorActionable: null
     } : value;
 }
 export interface CreateActorOptions {

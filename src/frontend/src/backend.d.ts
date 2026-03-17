@@ -12,18 +12,21 @@ export interface UserProfile {
     name: string;
 }
 export interface Scenario {
+    who?: MatrixWho;
     suggestions: Array<string>;
     text: string;
+    challengeType?: MatrixType;
     timestamp: Time;
-    category?: Category;
 }
-export enum Category {
-    communication = "communication",
-    workload = "workload",
-    conflict = "conflict",
-    feedback = "feedback",
-    general = "general",
-    escalation = "escalation"
+export enum MatrixType {
+    perceptionMindset = "perceptionMindset",
+    careerGrowth = "careerGrowth",
+    behaviorActionable = "behaviorActionable"
+}
+export enum MatrixWho {
+    systemOrg = "systemOrg",
+    peerTeam = "peerTeam",
+    leaderManager = "leaderManager"
 }
 export enum UserRole {
     admin = "admin",
@@ -38,5 +41,5 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    submitScenario(text: string, category: Category | null): Promise<Array<string>>;
+    submitScenario(text: string, who: MatrixWho | null, challengeType: MatrixType | null): Promise<Array<string>>;
 }
