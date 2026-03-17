@@ -196,10 +196,25 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.2 }}
-      className="flex flex-col items-center justify-center py-20 px-4"
+      className="flex flex-col items-center bg-background"
       data-ocid="auth.panel"
     >
-      <div className="bg-card rounded-2xl border border-border shadow-elevated p-10 max-w-md w-full text-center">
+      {/* Infographic section */}
+      <section className="w-full bg-background py-10 px-4 flex flex-col items-center">
+        <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-5 font-body">
+          How Workplace Compass works
+        </p>
+        <div className="max-w-2xl w-full rounded-2xl overflow-hidden shadow-md border border-border">
+          <img
+            src="/assets/uploads/workplace-compass-1.png"
+            alt="How Workplace Compass works"
+            className="w-full h-auto block"
+          />
+        </div>
+      </section>
+
+      {/* Auth card */}
+      <div className="bg-card rounded-2xl border border-border shadow-elevated p-10 max-w-md w-full text-center mt-6 mb-20">
         <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
           <ShieldCheck className="w-8 h-8 text-primary" />
         </div>
@@ -284,6 +299,7 @@ function AuthenticatedApp() {
         text,
         category: selectedCategory,
       });
+      // Set suggestions FIRST so they are available the moment the dialog opens
       setSuggestions(result);
       setShowResultsDialog(true);
     } catch {
@@ -443,17 +459,7 @@ function AuthenticatedApp() {
                 </DialogTitle>
               </DialogHeader>
 
-              {isPending ? (
-                <div
-                  className="space-y-3 py-4"
-                  data-ocid="results.loading_state"
-                >
-                  <Skeleton className="h-16 w-full rounded-xl" />
-                  <Skeleton className="h-16 w-full rounded-xl" />
-                  <Skeleton className="h-16 w-full rounded-xl" />
-                  <Skeleton className="h-16 w-full rounded-xl" />
-                </div>
-              ) : suggestions && suggestions.length > 0 ? (
+              {suggestions && suggestions.length > 0 ? (
                 <div className="space-y-3 py-2" data-ocid="results.panel">
                   {suggestions.map((suggestion, i) => (
                     <motion.div
@@ -483,7 +489,7 @@ function AuthenticatedApp() {
                   className="py-8 text-center"
                 >
                   <p className="text-sm text-muted-foreground">
-                    No suggestions were returned. Please try again.
+                    No suggestions returned. Please try submitting again.
                   </p>
                 </div>
               )}
@@ -779,7 +785,7 @@ function MainApp() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border/60 mt-20 py-8">
+      <footer className="border-t border-border/60 mt-20 py-8 bg-background">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
           <p className="text-sm text-muted-foreground font-body">
             © {new Date().getFullYear()}. Built with{" "}
