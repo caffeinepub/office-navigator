@@ -66,18 +66,23 @@ import {
   GraduationCap,
   Heart,
   KeyRound,
+  Layers,
   Lightbulb,
   Loader2,
+  Lock,
   LogOut,
   MessageCircle,
   MessageSquare,
+  MessageSquarePlus,
   Mic,
   Pencil,
   Play,
   Plus,
+  PlusCircle,
   Printer,
   RefreshCw,
   Rocket,
+  Shield,
   ShieldCheck,
   Sparkles,
   Square,
@@ -100,6 +105,11 @@ import { toast } from "sonner";
 import type { Scenario } from "./backend.d";
 import { DisclaimerModal } from "./components/DisclaimerModal";
 import { GrowthPathSection } from "./components/GrowthPathSection";
+import { OnboardingTour } from "./components/OnboardingTour";
+import {
+  SessionSummaryPanel,
+  SummariesTab,
+} from "./components/SessionSummaryPanel";
 import { VoiceDictationButton } from "./components/VoiceDictationButton";
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 import { useAuthActions, useAuthState } from "./hooks/useAuthState";
@@ -387,6 +397,20 @@ function parseSuggestions(items: string[]): {
 }
 
 // ─── Inline Coaching Disclaimer ──────────────────────────────────────────────
+function storeFollowupPending(topic: string, sessionType: string) {
+  const q = `How did it go with "${topic.slice(0, 60)}"? Did the coaching help?`;
+  const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  localStorage.setItem(
+    "wc_followup_pending",
+    JSON.stringify({
+      question: q,
+      dueDate,
+      sessionTopic: topic.slice(0, 60),
+      sessionType,
+    }),
+  );
+}
+
 function CoachingDisclaimer() {
   return (
     <p className="text-xs text-muted-foreground italic mt-2 pt-2 border-t border-border/40 font-body">
@@ -411,17 +435,14 @@ function FeedbackFormDialog() {
     if (!message.trim()) return;
     setSubmitting(true);
     try {
-      const res = await fetch(
-        "https://formspree.io/raviteja_joshi@outlook.com",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ name, email, message, _replyto: email }),
+      const res = await fetch("https://formspree.io/f/xreopaak", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
         },
-      );
+        body: JSON.stringify({ name, email, message, _replyto: email }),
+      });
       if (res.ok) {
         setSubmitted(true);
         setName("");
@@ -645,8 +666,34 @@ const TONE_PREFIXES: Record<string, string> = {
     "[TONE: Straight-Talker - direct, no-nonsense, honest coach] ",
 };
 
+function getActiveGoalContext(): string {
+  try {
+    const raw = localStorage.getItem("wc_90day_goal");
+    if (!raw) return "";
+    const goals: Array<{
+      goal: string;
+      milestones: { text: string; done: boolean }[];
+    }> = JSON.parse(raw);
+    if (!goals || goals.length === 0) return "";
+    const activeGoal = goals[0];
+    const pendingMilestones =
+      activeGoal.milestones?.filter((m) => !m.done).map((m) => m.text) ?? [];
+    let ctx = `[GOAL CONTEXT: The user's current 90-day career goal is: "${activeGoal.goal}".`;
+    if (pendingMilestones.length > 0) {
+      ctx += ` Pending milestones: ${pendingMilestones.slice(0, 3).join("; ")}.`;
+    }
+    ctx +=
+      " Tie your coaching advice back to this goal where relevant, showing how today's situation connects to their bigger career objective.] ";
+    return ctx;
+  } catch {
+    return "";
+  }
+}
+
 function buildPrompt(text: string, tone: string): string {
-  return SAFETY_PREFIX + (TONE_PREFIXES[tone] ?? "") + text;
+  return (
+    SAFETY_PREFIX + (TONE_PREFIXES[tone] ?? "") + getActiveGoalContext() + text
+  );
 }
 
 function useVoices() {
@@ -1507,6 +1554,7 @@ function ReframeTab({
       );
       setResult(res);
       setShowDialog(true);
+      storeFollowupPending(situation.trim().slice(0, 60), "reframe");
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
@@ -1613,6 +1661,11 @@ function ReframeTab({
                     />
                   </div>
                   <CoachingDisclaimer />
+                  <SessionSummaryPanel
+                    responseText={resultParsed.insights.join(". ")}
+                    sessionType="reframe"
+                    topic={situation.slice(0, 100)}
+                  />
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -1668,6 +1721,7 @@ function ScriptBuilderTab({
       );
       setResult(res);
       setShowDialog(true);
+      storeFollowupPending(scenarioType, "script");
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
@@ -1801,6 +1855,11 @@ function ScriptBuilderTab({
                     />
                   </div>
                   <CoachingDisclaimer />
+                  <SessionSummaryPanel
+                    responseText={resultParsed.insights.join(". ")}
+                    sessionType="script"
+                    topic={scenarioType}
+                  />
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -2440,6 +2499,7 @@ function AskCoachPanel({
       const result = await submitChat.mutateAsync(promptWithTone);
       setChatInsights(result);
       setShowChatDialog(true);
+      storeFollowupPending(trimmed.slice(0, 60), "coach");
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
@@ -2640,6 +2700,11 @@ function AskCoachPanel({
                             />
                           </div>
                           <CoachingDisclaimer />
+                          <SessionSummaryPanel
+                            responseText={insights.join(". ")}
+                            sessionType="coach"
+                            topic={question.slice(0, 100)}
+                          />
                         </>
                       );
                     })()}
@@ -2709,6 +2774,14 @@ type AppMode = "matrix" | "chat" | "practice" | "reframe" | "scripts" | "goals";
 function AuthenticatedApp() {
   const [mode, setMode] = useState<AppMode>("matrix");
   const [coachingTone, _setCoachingTone] = useState<CoachingTone>("Mentor");
+  const [followupBanner, setFollowupBanner] = useState<{
+    question: string;
+    sessionTopic: string;
+    sessionType: string;
+  } | null>(null);
+  const [showFollowupDialog, setShowFollowupDialog] = useState(false);
+  const [followupReflection, setFollowupReflection] = useState("");
+  const [followupReply, setFollowupReply] = useState("");
   const [selectedWho, setSelectedWho] = useState<MatrixWho | null>(null);
   const [selectedType, setSelectedType] = useState<MatrixType | null>(null);
   const [scenarioText, setScenarioText] = useState("");
@@ -2726,6 +2799,22 @@ function AuthenticatedApp() {
   const [practiceCount, setPracticeCount] = useState(
     () => getPracticeCompletions().length,
   );
+
+  // Check for due follow-up questions on mount
+  useEffect(() => {
+    const raw = localStorage.getItem("wc_followup_pending");
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw);
+      if (pending && new Date(pending.dueDate) <= new Date()) {
+        setFollowupBanner({
+          question: pending.question,
+          sessionTopic: pending.sessionTopic,
+          sessionType: pending.sessionType,
+        });
+      }
+    } catch {}
+  }, []);
 
   // Sync practice completions from localStorage when mode changes
   useEffect(() => {
@@ -2778,6 +2867,11 @@ function AuthenticatedApp() {
       setSuggestions(result);
       setConfidencePostScore(5);
       setShowResultsDialog(true);
+      storeFollowupPending(
+        scenarioText.trim().slice(0, 60) ||
+          (selectedCell?.scenario ?? "your scenario"),
+        "matrix",
+      );
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
@@ -2905,6 +2999,152 @@ function AuthenticatedApp() {
             {[profile.role, profile.industry].filter(Boolean).join(" · ")}
           </span>
         </motion.div>
+      )}
+
+      {/* Follow-up Question Banner */}
+      {followupBanner && !showFollowupDialog && (
+        <div
+          className="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm font-body"
+          data-ocid="followup.panel"
+        >
+          <span className="text-amber-600 flex-shrink-0">&#x1F514;</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-amber-800 font-medium">How did it go?</span>
+            <span className="text-amber-700 ml-1">
+              Your coach has a follow-up about: {followupBanner.sessionTopic}
+            </span>
+          </div>
+          <button
+            type="button"
+            data-ocid="followup.primary_button"
+            onClick={() => {
+              setFollowupReflection("");
+              setFollowupReply("");
+              setShowFollowupDialog(true);
+            }}
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors"
+          >
+            Reflect Now
+          </button>
+          <button
+            type="button"
+            data-ocid="followup.close_button"
+            onClick={() => {
+              setFollowupBanner(null);
+              localStorage.removeItem("wc_followup_pending");
+            }}
+            className="flex-shrink-0 text-amber-500 hover:text-amber-700 transition-colors p-1"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {showFollowupDialog && followupBanner && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          data-ocid="followup.modal"
+        >
+          <div className="bg-card rounded-2xl border border-border shadow-lg max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-lg font-bold text-foreground">
+                &#x1F514; Follow-up from Your Coach
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFollowupDialog(false)}
+                className="text-muted-foreground hover:text-foreground p-1"
+                data-ocid="followup.close_button"
+                aria-label="Close"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm font-body text-foreground bg-muted/40 rounded-lg p-3 italic">
+              {followupBanner.question}
+            </p>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="followup-reflection-input"
+                className="text-xs font-semibold font-body text-foreground"
+              >
+                Your Reflection
+              </label>
+              <textarea
+                id="followup-reflection-input"
+                data-ocid="followup.textarea"
+                value={followupReflection}
+                onChange={(e) => setFollowupReflection(e.target.value)}
+                placeholder="How did it actually go?"
+                className="w-full min-h-[100px] rounded-lg border border-border bg-background px-3 py-2 text-sm font-body resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {!followupReply ? (
+              <button
+                type="button"
+                data-ocid="followup.submit_button"
+                disabled={!followupReflection.trim()}
+                onClick={() => {
+                  setFollowupReply(
+                    "Thank you for reflecting. Growth comes from consistent practice. The fact that you showed up and reflected is already a step forward. Keep going.",
+                  );
+                  localStorage.removeItem("wc_followup_pending");
+                }}
+                className="w-full py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold text-sm disabled:opacity-50 transition-colors"
+              >
+                Send to Coach
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm font-body text-foreground leading-relaxed">
+                  <span className="font-semibold text-primary mr-1">
+                    Coach:
+                  </span>
+                  {followupReply}
+                </div>
+                <button
+                  type="button"
+                  data-ocid="followup.close_button"
+                  onClick={() => {
+                    setShowFollowupDialog(false);
+                    setFollowupBanner(null);
+                  }}
+                  className="w-full py-2 rounded-xl bg-muted hover:bg-muted/80 font-body text-sm font-medium text-foreground transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* 90-Day Goal Banner */}
@@ -3467,6 +3707,30 @@ function AuthenticatedApp() {
               <Sparkles className="w-3.5 h-3.5 mr-1" />
               Strengths
             </TabsTrigger>
+            <TabsTrigger
+              value="peer-stories"
+              className="font-body text-sm"
+              data-ocid="peer-stories.tab"
+            >
+              <Users className="w-3.5 h-3.5 mr-1" />
+              Peer Stories
+            </TabsTrigger>
+            <TabsTrigger
+              value="my-scenarios"
+              className="font-body text-sm"
+              data-ocid="my-scenarios.tab"
+            >
+              <Layers className="w-3.5 h-3.5 mr-1" />
+              My Scenarios
+            </TabsTrigger>
+            <TabsTrigger
+              value="summaries"
+              className="font-body text-sm"
+              data-ocid="summaries.tab"
+            >
+              <BookOpen className="w-3.5 h-3.5 mr-1" />
+              Summaries
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="scenarios">
@@ -3550,6 +3814,15 @@ function AuthenticatedApp() {
           </TabsContent>
           <TabsContent value="strengths">
             <StrengthSpotterTab chats={chatHistory} scenarios={history} />
+          </TabsContent>
+          <TabsContent value="peer-stories">
+            <AnonymousPeerStoriesTab />
+          </TabsContent>
+          <TabsContent value="my-scenarios">
+            <UserDefinedScenariosTab />
+          </TabsContent>
+          <TabsContent value="summaries">
+            <SummariesTab />
           </TabsContent>
         </Tabs>
       </section>
@@ -3669,6 +3942,15 @@ function AuthenticatedApp() {
                               </Button>
                             </div>
                           )}
+                          <SessionSummaryPanel
+                            responseText={insights.join(". ")}
+                            sessionType="matrix"
+                            topic={
+                              selectedCell
+                                ? `${selectedCell.scenario}: ${scenarioText.slice(0, 80)}`
+                                : scenarioText.slice(0, 80)
+                            }
+                          />
                         </>
                       );
                     })()}
@@ -3891,6 +4173,71 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
                 <p className="font-body text-xs text-background/55 leading-relaxed">
                   {sub}
                 </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* How Our Coaching Works - Methodology Section */}
+        <div className="w-full max-w-3xl mb-10">
+          <div className="text-center mb-6">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest font-body mb-1">
+              The Framework
+            </p>
+            <h2 className="font-display text-2xl font-bold text-foreground">
+              How Our Coaching Works
+            </h2>
+            <p className="text-sm text-muted-foreground font-body max-w-lg mx-auto mt-2 leading-relaxed">
+              Built on proven frameworks &#x2014; Cognitive Behavioural
+              Coaching, Appreciative Inquiry, and Solution-Focused Therapy
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              {
+                step: 1,
+                icon: "🎯",
+                title: "Share Your Challenge",
+                desc: "Describe what's happening at work, in your own words — no judgment, just context.",
+              },
+              {
+                step: 2,
+                icon: "🧠",
+                title: "Get Tailored Coaching",
+                desc: "AI adapts to your role, industry, and emotional context for relevant, personalised advice.",
+              },
+              {
+                step: 3,
+                icon: "⚡",
+                title: "Take Micro-Actions",
+                desc: "Every session ends with 2–3 concrete steps you can try today — small moves, real progress.",
+              },
+              {
+                step: 4,
+                icon: "📈",
+                title: "Track Your Growth",
+                desc: "Monitor confidence, strengths, and progress over time to see how far you've come.",
+              },
+            ].map(({ step, icon, title, desc }) => (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: step * 0.08 }}
+                className="bg-card rounded-xl border border-border p-4 flex flex-col gap-3 relative hover:shadow-sm transition-shadow"
+              >
+                <span className="absolute -top-2.5 left-3 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center font-body">
+                  {step}
+                </span>
+                <div className="text-2xl mt-1">{icon}</div>
+                <div>
+                  <h3 className="font-display text-sm font-bold text-foreground mb-1">
+                    {title}
+                  </h3>
+                  <p className="font-body text-xs text-muted-foreground leading-relaxed">
+                    {desc}
+                  </p>
+                </div>
               </motion.div>
             ))}
           </div>
@@ -4981,9 +5328,49 @@ function MainApp() {
   const { identity } = useInternetIdentity();
   const [showSetProfileDialog, setShowSetProfileDialog] = useState(false);
   const nudgeShownRef = useRef(false);
+  const [streakCount, setStreakCount] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const { data: profile, isSuccess: profileLoaded } = useGetCallerUserProfile();
   const userName = profile?.name ?? "";
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const today = new Date().toISOString().slice(0, 10);
+      let streak = { lastVisit: "", count: 0 };
+      try {
+        const r = localStorage.getItem("wc_streak");
+        if (r) streak = JSON.parse(r);
+      } catch {}
+      if (streak.lastVisit === today) {
+        setStreakCount(streak.count);
+      } else {
+        const diff = streak.lastVisit
+          ? Math.round(
+              (new Date(today).getTime() -
+                new Date(streak.lastVisit).getTime()) /
+                86400000,
+            )
+          : 999;
+        const newCount = diff === 1 ? streak.count + 1 : 1;
+        localStorage.setItem(
+          "wc_streak",
+          JSON.stringify({ lastVisit: today, count: newCount }),
+        );
+        setStreakCount(newCount);
+      }
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      profileLoaded &&
+      !localStorage.getItem("wc_onboarding_done")
+    ) {
+      setShowOnboarding(true);
+    }
+  }, [isAuthenticated, profileLoaded]);
 
   useEffect(() => {
     if (
@@ -5036,6 +5423,14 @@ function MainApp() {
               <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
             ) : isAuthenticated ? (
               <>
+                {streakCount >= 2 && (
+                  <span
+                    className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold font-body ring-1 ring-amber-200"
+                    data-ocid="streak.panel"
+                  >
+                    🔥 {streakCount} days
+                  </span>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -5214,6 +5609,13 @@ function MainApp() {
           )}
         </AnimatePresence>
       </main>
+
+      {showOnboarding && (
+        <OnboardingTour
+          onComplete={() => setShowOnboarding(false)}
+          onOpenProfile={() => setShowSetProfileDialog(true)}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-border/60 mt-20 py-8 bg-background">
@@ -5596,6 +5998,647 @@ function StrengthSpotterTab({ chats, scenarios }: StrengthSpotterTabProps) {
           </motion.div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Anonymous Peer Stories Tab ──────────────────────────────────────────────
+
+const SEED_PEER_STORIES = [
+  {
+    id: "seed-1",
+    role: "Mid-level Manager",
+    industry: "IT Services",
+    category: "Conflict Resolution",
+    story:
+      "I was caught between two senior stakeholders with opposing views. Rather than taking sides, I scheduled a joint session and focused the conversation on shared goals. Both came around and thanked me later for the neutral facilitation.",
+  },
+  {
+    id: "seed-2",
+    role: "Individual Contributor",
+    industry: "Banking",
+    category: "Feedback & Growth",
+    story:
+      "My annual review cited communication issues I wasn't aware of. Instead of getting defensive, I asked my manager for specific examples and created a 30-day improvement plan. Six months later I was promoted.",
+  },
+  {
+    id: "seed-3",
+    role: "Team Lead",
+    industry: "ITES/BPO",
+    category: "Work-Life Balance",
+    story:
+      "Constant after-hours pings were burning me out. I set a clear 'response-by-next-morning' norm with my team and communicated it to stakeholders. After initial pushback, productivity actually improved.",
+  },
+  {
+    id: "seed-4",
+    role: "Senior Professional",
+    industry: "Healthcare",
+    category: "Workplace Politics",
+    story:
+      "A colleague took credit for my project in front of leadership. Instead of confronting them publicly, I documented my contributions and shared them proactively in the next review. My manager noticed the pattern on their own.",
+  },
+  {
+    id: "seed-5",
+    role: "New Joiner",
+    industry: "EdTech",
+    category: "Imposter Syndrome",
+    story:
+      "I felt underqualified in every meeting for months. I started logging one thing I contributed per day, no matter how small. That habit rebuilt my confidence faster than any reassurance from others.",
+  },
+  {
+    id: "seed-6",
+    role: "HR Professional",
+    industry: "Manufacturing",
+    category: "Difficult Conversations",
+    story:
+      "Had to deliver a performance warning to a high-performer whose attitude was toxic. I prepared a factual script, kept my tone neutral, and focused on observable behavior — not personality. It went better than expected and behavior improved.",
+  },
+  {
+    id: "seed-7",
+    role: "Project Manager",
+    industry: "Telecom",
+    category: "Career Transition",
+    story:
+      "Moving from technical to management felt like starting over. I found a mentor in a different department, shadowed team leads, and took on small leadership moments. Within a year, I felt fully grounded in the new role.",
+  },
+  {
+    id: "seed-8",
+    role: "Senior Manager",
+    industry: "Retail",
+    category: "Managing Up",
+    story:
+      "My director's priorities kept shifting, making my team's work chaotic. I started summarizing every meeting in a brief written note and asking for confirmation. This created a paper trail and reduced whiplash significantly.",
+  },
+];
+
+const STORY_CATEGORIES = [
+  "Conflict Resolution",
+  "Feedback & Growth",
+  "Work-Life Balance",
+  "Workplace Politics",
+  "Imposter Syndrome",
+  "Difficult Conversations",
+  "Career Transition",
+  "Managing Up",
+  "Other",
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  "Conflict Resolution": "bg-red-100 text-red-700",
+  "Feedback & Growth": "bg-green-100 text-green-700",
+  "Work-Life Balance": "bg-blue-100 text-blue-700",
+  "Workplace Politics": "bg-purple-100 text-purple-700",
+  "Imposter Syndrome": "bg-yellow-100 text-yellow-700",
+  "Difficult Conversations": "bg-orange-100 text-orange-700",
+  "Career Transition": "bg-teal-100 text-teal-700",
+  "Managing Up": "bg-indigo-100 text-indigo-700",
+  Other: "bg-gray-100 text-gray-700",
+};
+
+interface PeerStory {
+  id: string;
+  role: string;
+  industry: string;
+  category: string;
+  story: string;
+}
+
+function AnonymousPeerStoriesTab() {
+  const [userStories, setUserStories] = useState<PeerStory[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wc_peer_stories") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [form, setForm] = useState({
+    role: "",
+    industry: "",
+    category: "",
+    story: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [filterCategory, setFilterCategory] = useState("All");
+
+  const allStories = [...SEED_PEER_STORIES, ...userStories];
+  const categories = ["All", ...STORY_CATEGORIES];
+  const filtered =
+    filterCategory === "All"
+      ? allStories
+      : allStories.filter((s) => s.category === filterCategory);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (
+      !form.role.trim() ||
+      !form.industry.trim() ||
+      !form.category ||
+      !form.story.trim()
+    )
+      return;
+    setSubmitting(true);
+    const newStory: PeerStory = {
+      id: `user-${Date.now().toString(36)}`,
+      role: form.role.trim(),
+      industry: form.industry.trim(),
+      category: form.category,
+      story: form.story.trim(),
+    };
+    const updated = [...userStories, newStory];
+    setUserStories(updated);
+    localStorage.setItem("wc_peer_stories", JSON.stringify(updated));
+    setForm({ role: "", industry: "", category: "", story: "" });
+    setSubmitting(false);
+    toast.success("Your story has been shared anonymously. Thank you!");
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/10">
+        <Shield className="w-4 h-4 text-primary flex-shrink-0" />
+        <p className="text-xs text-muted-foreground font-body">
+          All stories are anonymized. Your name is never collected or stored.
+        </p>
+      </div>
+
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-2">
+        {categories.map((cat) => (
+          <button
+            type="button"
+            key={cat}
+            onClick={() => setFilterCategory(cat)}
+            className={`px-3 py-1 rounded-full text-xs font-body font-medium transition-colors ${
+              filterCategory === cat
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Stories grid */}
+      <div className="space-y-4">
+        {filtered.length === 0 ? (
+          <div
+            className="text-center py-12 text-muted-foreground font-body"
+            data-ocid="peer-stories.empty_state"
+          >
+            No stories in this category yet. Be the first to share!
+          </div>
+        ) : (
+          filtered.map((s, i) => (
+            <motion.div
+              key={s.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="rounded-2xl border bg-card p-5 shadow-sm"
+              data-ocid={`peer-stories.item.${i + 1}`}
+            >
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-semibold font-body ${
+                    CATEGORY_COLORS[s.category] ?? "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {s.category}
+                </span>
+                <span className="text-xs text-muted-foreground font-body">
+                  {s.role} · {s.industry}
+                </span>
+              </div>
+              <p className="text-sm font-body text-foreground leading-relaxed">
+                "{s.story}"
+              </p>
+            </motion.div>
+          ))
+        )}
+      </div>
+
+      {/* Share form */}
+      <div className="rounded-2xl border bg-muted/30 p-5 space-y-4">
+        <h3 className="font-display font-semibold text-base text-foreground flex items-center gap-2">
+          <MessageSquarePlus className="w-4 h-4 text-primary" />
+          Share Your Story (Anonymous)
+        </h3>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="ps-role"
+                className="text-xs font-body text-muted-foreground mb-1 block"
+              >
+                Your Role
+              </label>
+              <Input
+                id="ps-role"
+                value={form.role}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, role: e.target.value }))
+                }
+                placeholder="e.g. Team Lead"
+                className="font-body text-sm"
+                data-ocid="peer-stories.input"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="ps-industry"
+                className="text-xs font-body text-muted-foreground mb-1 block"
+              >
+                Industry
+              </label>
+              <Input
+                id="ps-industry"
+                value={form.industry}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, industry: e.target.value }))
+                }
+                placeholder="e.g. IT Services"
+                className="font-body text-sm"
+                data-ocid="peer-stories.input"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-body text-muted-foreground mb-1">
+              Category
+            </p>
+            <Select
+              value={form.category}
+              onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
+            >
+              <SelectTrigger
+                className="font-body text-sm"
+                data-ocid="peer-stories.select"
+              >
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {STORY_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat} className="font-body">
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label
+              htmlFor="ps-story2"
+              className="text-xs font-body text-muted-foreground mb-1 block"
+            >
+              Your Story
+            </label>
+            <Textarea
+              id="ps-story2"
+              value={form.story}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, story: e.target.value }))
+              }
+              placeholder="Briefly describe how you navigated the situation (no names or identifying details)..."
+              rows={4}
+              className="font-body text-sm resize-none"
+              data-ocid="peer-stories.textarea"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={
+              submitting ||
+              !form.role ||
+              !form.industry ||
+              !form.category ||
+              !form.story
+            }
+            className="font-body"
+            data-ocid="peer-stories.submit_button"
+          >
+            Share Anonymously
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── User-Defined Scenario Layers Tab ────────────────────────────────────────
+
+interface CustomScenario {
+  id: string;
+  title: string;
+  description: string;
+  coachingNotes: string;
+  createdAt: string;
+}
+
+function UserDefinedScenariosTab() {
+  const [scenarios, setScenarios] = useState<CustomScenario[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wc_custom_scenarios") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    coachingNotes: "",
+  });
+
+  function saveToStorage(updated: CustomScenario[]) {
+    setScenarios(updated);
+    localStorage.setItem("wc_custom_scenarios", JSON.stringify(updated));
+  }
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.title.trim() || !form.description.trim()) return;
+    const newScenario: CustomScenario = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      title: form.title.trim(),
+      description: form.description.trim(),
+      coachingNotes: form.coachingNotes.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    saveToStorage([...scenarios, newScenario]);
+    setForm({ title: "", description: "", coachingNotes: "" });
+    setShowForm(false);
+    toast.success("Custom scenario saved!");
+  }
+
+  function handleEditSave(id: string) {
+    const updated = scenarios.map((s) =>
+      s.id === id
+        ? {
+            ...s,
+            title: form.title.trim(),
+            description: form.description.trim(),
+            coachingNotes: form.coachingNotes.trim(),
+          }
+        : s,
+    );
+    saveToStorage(updated);
+    setEditId(null);
+    toast.success("Scenario updated!");
+  }
+
+  function handleDelete(id: string) {
+    saveToStorage(scenarios.filter((s) => s.id !== id));
+    toast.success("Scenario deleted.");
+  }
+
+  function startEdit(s: CustomScenario) {
+    setEditId(s.id);
+    setForm({
+      title: s.title,
+      description: s.description,
+      coachingNotes: s.coachingNotes,
+    });
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/10">
+        <Lock className="w-4 h-4 text-primary flex-shrink-0" />
+        <p className="text-xs text-muted-foreground font-body">
+          Custom scenarios are private and stored only on your device.
+        </p>
+      </div>
+
+      {/* Add scenario button / form */}
+      {!showForm ? (
+        <Button
+          variant="outline"
+          className="w-full font-body border-dashed"
+          onClick={() => {
+            setShowForm(true);
+            setForm({ title: "", description: "", coachingNotes: "" });
+          }}
+          data-ocid="my-scenarios.open_modal_button"
+        >
+          <PlusCircle className="w-4 h-4 mr-2" />
+          Add Custom Scenario
+        </Button>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border bg-muted/30 p-5 space-y-3"
+          data-ocid="my-scenarios.panel"
+        >
+          <h3 className="font-display font-semibold text-sm text-foreground">
+            New Custom Scenario
+          </h3>
+          <form onSubmit={handleAdd} className="space-y-3">
+            <div>
+              <label
+                htmlFor="ms-title2"
+                className="text-xs font-body text-muted-foreground mb-1 block"
+              >
+                Title *
+              </label>
+              <Input
+                id="ms-title2"
+                value={form.title}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, title: e.target.value }))
+                }
+                placeholder="e.g. Handling micromanagement from a new boss"
+                className="font-body text-sm"
+                data-ocid="my-scenarios.input"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="ms-desc2"
+                className="text-xs font-body text-muted-foreground mb-1 block"
+              >
+                Description *
+              </label>
+              <Textarea
+                id="ms-desc2"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
+                placeholder="Describe the scenario in detail..."
+                rows={3}
+                className="font-body text-sm resize-none"
+                data-ocid="my-scenarios.textarea"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="ms-notes2"
+                className="text-xs font-body text-muted-foreground mb-1 block"
+              >
+                Coaching Notes / Context (optional)
+              </label>
+              <Textarea
+                id="ms-notes2"
+                value={form.coachingNotes}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, coachingNotes: e.target.value }))
+                }
+                placeholder="Any specific context or focus areas for coaching..."
+                rows={2}
+                className="font-body text-sm resize-none"
+                data-ocid="my-scenarios.textarea"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                disabled={!form.title.trim() || !form.description.trim()}
+                className="font-body"
+                data-ocid="my-scenarios.save_button"
+              >
+                Save Scenario
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="font-body"
+                onClick={() => setShowForm(false)}
+                data-ocid="my-scenarios.cancel_button"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
+      {/* Scenarios list */}
+      {scenarios.length === 0 ? (
+        <div
+          className="text-center py-12 space-y-2"
+          data-ocid="my-scenarios.empty_state"
+        >
+          <Layers className="w-10 h-10 mx-auto text-muted-foreground/40" />
+          <p className="text-sm font-body text-muted-foreground">
+            Define your own workplace scenarios for more targeted coaching.
+          </p>
+          <p className="text-xs font-body text-muted-foreground/70">
+            Your custom scenarios help personalize every coaching session.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {scenarios.map((s, i) => (
+            <motion.div
+              key={s.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="rounded-2xl border bg-card p-5 shadow-sm"
+              data-ocid={`my-scenarios.item.${i + 1}`}
+            >
+              {editId === s.id ? (
+                <div className="space-y-3">
+                  <Input
+                    value={form.title}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, title: e.target.value }))
+                    }
+                    className="font-body text-sm font-semibold"
+                    data-ocid="my-scenarios.input"
+                  />
+                  <Textarea
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, description: e.target.value }))
+                    }
+                    rows={3}
+                    className="font-body text-sm resize-none"
+                    data-ocid="my-scenarios.textarea"
+                  />
+                  <Textarea
+                    value={form.coachingNotes}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, coachingNotes: e.target.value }))
+                    }
+                    placeholder="Coaching notes (optional)..."
+                    rows={2}
+                    className="font-body text-sm resize-none"
+                    data-ocid="my-scenarios.textarea"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="font-body"
+                      onClick={() => handleEditSave(s.id)}
+                      disabled={!form.title.trim() || !form.description.trim()}
+                      data-ocid="my-scenarios.save_button"
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-body"
+                      onClick={() => setEditId(null)}
+                      data-ocid="my-scenarios.cancel_button"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h4 className="font-display font-semibold text-sm text-foreground leading-snug">
+                      {s.title}
+                    </h4>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 font-body text-xs"
+                        onClick={() => startEdit(s)}
+                        data-ocid="my-scenarios.edit_button"
+                      >
+                        <Pencil className="w-3 h-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 font-body text-xs text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(s.id)}
+                        data-ocid="my-scenarios.delete_button"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm font-body text-muted-foreground leading-relaxed mb-2">
+                    {s.description}
+                  </p>
+                  {s.coachingNotes && (
+                    <div className="mt-2 p-2 rounded-lg bg-primary/5 border border-primary/10">
+                      <p className="text-xs font-body text-primary/80">
+                        <span className="font-semibold">Coaching context:</span>{" "}
+                        {s.coachingNotes}
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground/50 font-body mt-2">
+                    Added {new Date(s.createdAt).toLocaleDateString()}
+                  </p>
+                </>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
