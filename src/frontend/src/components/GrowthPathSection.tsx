@@ -8,6 +8,7 @@ import {
   Grid3X3,
   MessageCircle,
   Rocket,
+  Sparkles,
   Star,
   Target,
   Trophy,
@@ -343,6 +344,203 @@ function ConfidenceJourney() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// ─── Emerging Strengths (inline mini) ────────────────────────────────────────
+
+const STRENGTH_KEYWORDS: { name: string; icon: string; keywords: string[] }[] =
+  [
+    {
+      name: "Communication",
+      icon: "💬",
+      keywords: [
+        "speak",
+        "voice",
+        "message",
+        "express",
+        "explain",
+        "present",
+        "articulate",
+        "conversation",
+        "discuss",
+        "communicate",
+        "words",
+        "tone",
+      ],
+    },
+    {
+      name: "Resilience",
+      icon: "💪",
+      keywords: [
+        "bounce back",
+        "pressure",
+        "stress",
+        "difficult",
+        "tough",
+        "challenge",
+        "setback",
+        "recover",
+        "persist",
+        "keep going",
+        "despite",
+        "overwhelm",
+      ],
+    },
+    {
+      name: "Leadership",
+      icon: "🧭",
+      keywords: [
+        "lead",
+        "direction",
+        "vision",
+        "guide",
+        "mentor",
+        "inspire",
+        "team",
+        "delegate",
+        "decision",
+        "influence",
+        "ownership",
+        "accountable",
+      ],
+    },
+    {
+      name: "Empathy",
+      icon: "🤝",
+      keywords: [
+        "feel",
+        "understand",
+        "listen",
+        "support",
+        "care",
+        "concern",
+        "emotional",
+        "colleague",
+        "perspective",
+        "relate",
+        "compassion",
+      ],
+    },
+    {
+      name: "Problem Solving",
+      icon: "🔍",
+      keywords: [
+        "solve",
+        "fix",
+        "issue",
+        "root cause",
+        "analyze",
+        "figure out",
+        "approach",
+        "solution",
+        "resolve",
+        "troubleshoot",
+        "plan",
+      ],
+    },
+    {
+      name: "Adaptability",
+      icon: "🔄",
+      keywords: [
+        "change",
+        "adapt",
+        "new",
+        "shift",
+        "flexible",
+        "adjust",
+        "pivot",
+        "uncertain",
+        "transition",
+        "evolve",
+        "different",
+      ],
+    },
+    {
+      name: "Collaboration",
+      icon: "🌐",
+      keywords: [
+        "together",
+        "collaborate",
+        "team",
+        "partner",
+        "align",
+        "coordinate",
+        "contribute",
+        "joint",
+        "work with",
+        "group",
+      ],
+    },
+    {
+      name: "Initiative",
+      icon: "🚀",
+      keywords: [
+        "proactive",
+        "volunteer",
+        "step up",
+        "without being asked",
+        "took initiative",
+        "started",
+        "drive",
+        "push forward",
+        "go beyond",
+      ],
+    },
+    {
+      name: "Emotional Intelligence",
+      icon: "🧠",
+      keywords: [
+        "manage emotions",
+        "self-aware",
+        "regulate",
+        "calm",
+        "patience",
+        "composed",
+        "reaction",
+        "trigger",
+        "feelings",
+      ],
+    },
+    {
+      name: "Strategic Thinking",
+      icon: "♟️",
+      keywords: [
+        "long term",
+        "big picture",
+        "strategy",
+        "prioritize",
+        "plan ahead",
+        "goal",
+        "vision",
+        "outcome",
+        "roadmap",
+        "future",
+      ],
+    },
+  ];
+
+function getTopStrengths(
+  submissions: Scenario[],
+  chats: ChatEntry[],
+  limit: number,
+) {
+  const texts = [
+    ...chats.map((c) => c.question),
+    ...submissions.map((s) => s.text),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return STRENGTH_KEYWORDS.map((cat) => ({
+    ...cat,
+    score: Math.min(
+      100,
+      cat.keywords.filter((kw) => texts.includes(kw)).length * 15,
+    ),
+  }))
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 export function GrowthPathSection({
   submissions,
   chats,
@@ -658,6 +856,38 @@ export function GrowthPathSection({
           </p>
         </div>
       )}
+
+      {/* Emerging Strengths Preview */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: 0.35 }}
+        className="bg-card border border-border shadow rounded-2xl p-5 mt-6"
+        data-ocid="growth.panel"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <p className="font-body text-xs text-muted-foreground uppercase tracking-wide">
+            Emerging Strengths
+          </p>
+        </div>
+        {totalInteractions < 3 ? (
+          <p className="font-body text-sm text-muted-foreground italic">
+            Complete 3+ sessions to unlock
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {getTopStrengths(submissions, chats, 3).map((s) => (
+              <span
+                key={s.name}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20 font-body"
+              >
+                {s.icon} {s.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </motion.div>
     </section>
   );
 }

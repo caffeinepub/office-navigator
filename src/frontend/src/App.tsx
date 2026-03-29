@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -77,6 +79,7 @@ import {
   RefreshCw,
   Rocket,
   ShieldCheck,
+  Sparkles,
   Square,
   Star,
   Swords,
@@ -1481,7 +1484,10 @@ function HistoryItem({
 
 // ─── Reframe Tab ───────────────────────────────────────────────────────────────
 
-function ReframeTab({ coachingTone }: { coachingTone: CoachingTone }) {
+function ReframeTab({
+  coachingTone,
+  onToneChange,
+}: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
   const [situation, setSituation] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
   const [showDialog, setShowDialog] = useState(false);
@@ -1529,7 +1535,7 @@ function ReframeTab({ coachingTone }: { coachingTone: CoachingTone }) {
             className="min-h-[140px] text-sm font-body resize-none"
           />
         </div>
-        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <ToneSelectorBar value={coachingTone} onChange={onToneChange} />
         <div className="flex justify-end gap-2">
           <VoiceDictationButton
             onTranscript={(text) =>
@@ -1639,7 +1645,10 @@ const SCRIPT_SCENARIOS = [
   "Requesting flexible work",
 ];
 
-function ScriptBuilderTab({ coachingTone }: { coachingTone: CoachingTone }) {
+function ScriptBuilderTab({
+  coachingTone,
+  onToneChange,
+}: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
   const [scenarioType, setScenarioType] = useState("");
   const [context, setContext] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
@@ -1714,7 +1723,7 @@ function ScriptBuilderTab({ coachingTone }: { coachingTone: CoachingTone }) {
             className="min-h-[100px] text-sm font-body resize-none"
           />
         </div>
-        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <ToneSelectorBar value={coachingTone} onChange={onToneChange} />
         <div className="flex justify-end gap-2">
           <VoiceDictationButton
             onTranscript={(text) =>
@@ -2104,7 +2113,10 @@ function savePracticeCompletion(id: string) {
   }
 }
 
-function PracticeTab({ coachingTone }: { coachingTone: CoachingTone }) {
+function PracticeTab({
+  coachingTone,
+  onToneChange,
+}: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
   const [completions, setCompletions] = useState<string[]>(
     getPracticeCompletions,
   );
@@ -2269,7 +2281,7 @@ function PracticeTab({ coachingTone }: { coachingTone: CoachingTone }) {
           />
         </div>
 
-        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <ToneSelectorBar value={coachingTone} onChange={onToneChange} />
         <Button
           data-ocid="practice.submit_button"
           onClick={handleGetCoaching}
@@ -2374,7 +2386,10 @@ function PracticeTab({ coachingTone }: { coachingTone: CoachingTone }) {
   );
 }
 
-function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
+function AskCoachPanel({
+  coachingTone,
+  onToneChange,
+}: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
   const [question, setQuestion] = useState("");
   const [chatInsights, setChatInsights] = useState<string[] | null>(null);
   const [showChatDialog, setShowChatDialog] = useState(false);
@@ -2523,7 +2538,7 @@ function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
         </div>
 
         {/* Tone selector */}
-        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <ToneSelectorBar value={coachingTone} onChange={onToneChange} />
 
         {/* Submit */}
         <div className="flex items-center justify-between">
@@ -3256,7 +3271,10 @@ function AuthenticatedApp() {
                   </p>
                 </div>
               </div>
-              <AskCoachPanel coachingTone={coachingTone} />
+              <AskCoachPanel
+                coachingTone={coachingTone}
+                onToneChange={_setCoachingTone}
+              />
             </div>
           </motion.div>
         ) : mode === "practice" ? (
@@ -3281,7 +3299,10 @@ function AuthenticatedApp() {
                   </p>
                 </div>
               </div>
-              <PracticeTab coachingTone={coachingTone} />
+              <PracticeTab
+                coachingTone={coachingTone}
+                onToneChange={_setCoachingTone}
+              />
             </div>
           </motion.div>
         ) : mode === "reframe" ? (
@@ -3306,7 +3327,10 @@ function AuthenticatedApp() {
                   </p>
                 </div>
               </div>
-              <ReframeTab coachingTone={coachingTone} />
+              <ReframeTab
+                coachingTone={coachingTone}
+                onToneChange={_setCoachingTone}
+              />
             </div>
           </motion.div>
         ) : mode === "scripts" ? (
@@ -3331,7 +3355,10 @@ function AuthenticatedApp() {
                   </p>
                 </div>
               </div>
-              <ScriptBuilderTab coachingTone={coachingTone} />
+              <ScriptBuilderTab
+                coachingTone={coachingTone}
+                onToneChange={_setCoachingTone}
+              />
             </div>
           </motion.div>
         ) : (
@@ -3432,6 +3459,14 @@ function AuthenticatedApp() {
               <Trophy className="w-3.5 h-3.5 mr-1" />
               Weekly Wins
             </TabsTrigger>
+            <TabsTrigger
+              value="strengths"
+              className="font-body text-sm"
+              data-ocid="strengths.tab"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1" />
+              Strengths
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="scenarios">
@@ -3512,6 +3547,9 @@ function AuthenticatedApp() {
           </TabsContent>
           <TabsContent value="wins">
             <WeeklyWinsTab />
+          </TabsContent>
+          <TabsContent value="strengths">
+            <StrengthSpotterTab chats={chatHistory} scenarios={history} />
           </TabsContent>
         </Tabs>
       </section>
@@ -5227,6 +5265,337 @@ function LanguageSelector() {
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+// ─── Strength Spotter ─────────────────────────────────────────────────────────
+
+interface StrengthResult {
+  name: string;
+  icon: string;
+  score: number;
+  description: string;
+  snippets: string[];
+}
+
+const STRENGTH_CATEGORIES: {
+  name: string;
+  icon: string;
+  description: string;
+  keywords: string[];
+}[] = [
+  {
+    name: "Communication",
+    icon: "💬",
+    description:
+      "You express ideas clearly and connect with others effectively.",
+    keywords: [
+      "speak",
+      "voice",
+      "message",
+      "express",
+      "explain",
+      "present",
+      "articulate",
+      "conversation",
+      "discuss",
+      "communicate",
+      "words",
+      "tone",
+    ],
+  },
+  {
+    name: "Resilience",
+    icon: "💪",
+    description:
+      "You recover from setbacks and keep moving forward under pressure.",
+    keywords: [
+      "bounce back",
+      "pressure",
+      "stress",
+      "difficult",
+      "tough",
+      "challenge",
+      "setback",
+      "recover",
+      "persist",
+      "keep going",
+      "despite",
+      "overwhelm",
+    ],
+  },
+  {
+    name: "Leadership",
+    icon: "🧭",
+    description: "You inspire, guide, and take ownership to drive results.",
+    keywords: [
+      "lead",
+      "direction",
+      "vision",
+      "guide",
+      "mentor",
+      "inspire",
+      "team",
+      "delegate",
+      "decision",
+      "influence",
+      "ownership",
+      "accountable",
+    ],
+  },
+  {
+    name: "Empathy",
+    icon: "🤝",
+    description:
+      "You understand others' perspectives and offer genuine support.",
+    keywords: [
+      "feel",
+      "understand",
+      "listen",
+      "support",
+      "care",
+      "concern",
+      "emotional",
+      "colleague",
+      "perspective",
+      "relate",
+      "compassion",
+    ],
+  },
+  {
+    name: "Problem Solving",
+    icon: "🔍",
+    description: "You break down complex issues and find practical solutions.",
+    keywords: [
+      "solve",
+      "fix",
+      "issue",
+      "root cause",
+      "analyze",
+      "figure out",
+      "approach",
+      "solution",
+      "resolve",
+      "troubleshoot",
+      "plan",
+    ],
+  },
+  {
+    name: "Adaptability",
+    icon: "🔄",
+    description: "You embrace change and thrive in uncertain environments.",
+    keywords: [
+      "change",
+      "adapt",
+      "new",
+      "shift",
+      "flexible",
+      "adjust",
+      "pivot",
+      "uncertain",
+      "transition",
+      "evolve",
+      "different",
+    ],
+  },
+  {
+    name: "Collaboration",
+    icon: "🌐",
+    description: "You work well with others and build strong team dynamics.",
+    keywords: [
+      "together",
+      "collaborate",
+      "team",
+      "partner",
+      "align",
+      "coordinate",
+      "contribute",
+      "joint",
+      "work with",
+      "group",
+    ],
+  },
+  {
+    name: "Initiative",
+    icon: "🚀",
+    description: "You proactively take action and go beyond what is expected.",
+    keywords: [
+      "proactive",
+      "volunteer",
+      "step up",
+      "without being asked",
+      "took initiative",
+      "started",
+      "drive",
+      "push forward",
+      "go beyond",
+    ],
+  },
+  {
+    name: "Emotional Intelligence",
+    icon: "🧠",
+    description:
+      "You manage your emotions and respond thoughtfully under pressure.",
+    keywords: [
+      "manage emotions",
+      "self-aware",
+      "regulate",
+      "calm",
+      "patience",
+      "composed",
+      "reaction",
+      "trigger",
+      "feelings",
+    ],
+  },
+  {
+    name: "Strategic Thinking",
+    icon: "♟️",
+    description:
+      "You see the big picture and plan with long-term goals in mind.",
+    keywords: [
+      "long term",
+      "big picture",
+      "strategy",
+      "prioritize",
+      "plan ahead",
+      "goal",
+      "vision",
+      "outcome",
+      "roadmap",
+      "future",
+    ],
+  },
+];
+
+function detectStrengths(userTexts: string[]): StrengthResult[] {
+  const combined = userTexts.join(" ").toLowerCase();
+  const results: StrengthResult[] = [];
+
+  for (const cat of STRENGTH_CATEGORIES) {
+    let matchCount = 0;
+    const snippets: string[] = [];
+
+    for (const kw of cat.keywords) {
+      if (combined.includes(kw)) {
+        matchCount++;
+        // find snippet from individual texts
+        for (const text of userTexts) {
+          if (text.toLowerCase().includes(kw) && snippets.length < 2) {
+            const clean = text.trim().slice(0, 80);
+            if (!snippets.includes(clean)) snippets.push(clean);
+          }
+        }
+      }
+    }
+
+    const score = Math.min(100, matchCount * 15);
+    if (score > 0) {
+      results.push({
+        name: cat.name,
+        icon: cat.icon,
+        description: cat.description,
+        score,
+        snippets,
+      });
+    }
+  }
+
+  return results.sort((a, b) => b.score - a.score);
+}
+
+interface StrengthSpotterTabProps {
+  chats: import("./backend.d").ChatEntry[];
+  scenarios: Scenario[];
+}
+
+function StrengthSpotterTab({ chats, scenarios }: StrengthSpotterTabProps) {
+  const totalSessions = chats.length + scenarios.length;
+  const userTexts = [
+    ...chats.map((c) => c.question),
+    ...scenarios.map((s) => s.text),
+  ];
+  const strengths = detectStrengths(userTexts).slice(0, 6);
+
+  if (totalSessions < 3) {
+    return (
+      <div
+        data-ocid="strengths.empty_state"
+        className="text-center py-16 border border-dashed border-border rounded-2xl"
+      >
+        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <Sparkles className="w-6 h-6 text-primary" />
+        </div>
+        <p className="font-body text-base font-semibold text-foreground mb-2">
+          Keep coaching!
+        </p>
+        <p className="font-body text-sm text-muted-foreground max-w-xs mx-auto mb-6">
+          Strength Spotter activates after a few sessions. Your patterns will
+          start showing here.
+        </p>
+        <div className="max-w-[200px] mx-auto">
+          <div className="flex justify-between text-xs font-body text-muted-foreground mb-1">
+            <span>{totalSessions} of 3 sessions</span>
+            <span>{Math.round((totalSessions / 3) * 100)}%</span>
+          </div>
+          <Progress value={(totalSessions / 3) * 100} className="h-2" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div data-ocid="strengths.panel" className="space-y-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Sparkles className="w-5 h-5 text-primary" />
+        <h3 className="font-display text-lg font-bold text-foreground">
+          Your Strengths
+        </h3>
+      </div>
+      <p className="font-body text-sm text-muted-foreground -mt-2 mb-4">
+        Identified from your coaching sessions
+      </p>
+      <div className="space-y-3">
+        {strengths.map((s, i) => (
+          <motion.div
+            key={s.name}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07, duration: 0.3 }}
+            className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/15 rounded-2xl p-4"
+            data-ocid={`strengths.item.${i + 1}`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{s.icon}</span>
+                <span className="font-body font-semibold text-foreground text-sm">
+                  {s.name}
+                </span>
+              </div>
+              <span className="font-body text-xs font-semibold text-primary">
+                {s.score}%
+              </span>
+            </div>
+            <p className="font-body text-xs text-muted-foreground mb-3">
+              {s.description}
+            </p>
+            <Progress value={s.score} className="h-1.5 mb-3" />
+            {s.snippets.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {s.snippets.map((snippet) => (
+                  <span
+                    key={snippet}
+                    className="inline-block bg-muted/60 text-muted-foreground text-xs px-2 py-0.5 rounded-full italic max-w-[240px] truncate"
+                  >
+                    "{snippet}"
+                  </span>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -76,7 +76,7 @@ actor {
   };
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can access profiles");
     };
     switch (userProfilesV2.get(caller)) {
@@ -107,7 +107,7 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
     userProfilesV2.add(caller, profile);
@@ -558,7 +558,7 @@ actor {
   };
 
   public shared ({ caller }) func submitScenario(text : Text, who : ?MatrixWho, challengeType : ?MatrixType) : async [Text] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can submit scenarios");
     };
 
@@ -616,7 +616,7 @@ actor {
   };
 
   public query ({ caller }) func getRecentSubmissions() : async [Scenario] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can retrieve submissions");
     };
     switch (userSubmissions.get(caller)) {
@@ -628,7 +628,7 @@ actor {
   // ─── Free Chat ───────────────────────────────────────────────────────────────
 
   public shared ({ caller }) func submitFreeChat(question : Text) : async [Text] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can use the chat");
     };
     if (question.size() == 0) {
@@ -669,7 +669,7 @@ actor {
   };
 
   public query ({ caller }) func getRecentChats() : async [ChatEntry] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (caller.isAnonymous()) {
       Runtime.trap("Unauthorized: Only users can retrieve chats");
     };
     switch (userChats.get(caller)) {
