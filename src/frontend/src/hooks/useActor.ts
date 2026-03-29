@@ -23,6 +23,9 @@ export function useActor() {
         },
       };
 
+      // NOTE: Do NOT call any backend methods here (e.g. _initializeAccessControlWithSecret).
+      // The backend only checks caller.isAnonymous() — no initialization needed.
+      // Calling any backend method here will silently break all buttons if it throws.
       return await createActorWithConfig(actorOptions);
     },
     staleTime: Number.POSITIVE_INFINITY,
