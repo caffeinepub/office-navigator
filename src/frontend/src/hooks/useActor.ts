@@ -14,9 +14,11 @@ export function useActor() {
       if (!identity) {
         return await createActorWithConfig();
       }
-      return await createActorWithConfig({ agentOptions: { identity } });
+      return await createActorWithConfig({
+        agentOptions: { identity },
+      });
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 1000 * 60 * 5, // 5 minutes
     enabled: true,
   });
 
