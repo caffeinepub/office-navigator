@@ -28,17 +28,8 @@ function loadFromLS<T>(key: string): T[] {
   }
 }
 
-// Helper to detect authorization errors and re-init
-function isAuthError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes("Unauthorized") ||
-    msg.includes("not registered") ||
-    msg.includes("Only users")
-  );
-}
-
-// Re-register the caller with the backend access control, then retry
+// Re-register the caller with the backend access control, then retry.
+// Always reinit on any failure — _initializeAccessControlWithSecret is idempotent.
 async function reinitAndRetry<T>(
   actor: backendInterface,
   fn: () => Promise<T>,
@@ -47,7 +38,7 @@ async function reinitAndRetry<T>(
     const adminToken = getSecretParameter("caffeineAdminToken") ?? "";
     await actor._initializeAccessControlWithSecret(adminToken);
   } catch {
-    // ignore reinit errors — try the original call anyway
+    // ignore reinit errors — proceed with the retry anyway
   }
   return fn();
 }
@@ -79,14 +70,11 @@ export function useSubmitScenario() {
       let lines: string[];
       try {
         lines = await actor.submitScenario(text, who, challengeType);
-      } catch (err) {
-        if (isAuthError(err)) {
-          lines = await reinitAndRetry(actor, () =>
-            actor.submitScenario(text, who, challengeType),
-          );
-        } else {
-          throw err;
-        }
+      } catch {
+        // Always reinit and retry on any error
+        lines = await reinitAndRetry(actor, () =>
+          actor.submitScenario(text, who, challengeType),
+        );
       }
       // persist locally
       const entry: Scenario = {
@@ -117,7 +105,13 @@ export function useGetCallerUserProfile() {
       try {
         return await actor.getCallerUserProfile();
       } catch {
-        return null;
+        // Try reinit then fetch again
+        try {
+          await reinitAndRetry(actor, async () => {});
+          return await actor.getCallerUserProfile();
+        } catch {
+          return null;
+        }
       }
     },
     enabled: !!actor && !isFetching && isAuthenticated,
@@ -133,13 +127,11 @@ export function useSaveCallerUserProfile() {
       if (!actor) throw new Error("Actor not ready");
       try {
         return await actor.saveCallerUserProfile(profile);
-      } catch (err) {
-        if (isAuthError(err)) {
-          return await reinitAndRetry(actor, () =>
-            actor.saveCallerUserProfile(profile),
-          );
-        }
-        throw err;
+      } catch {
+        // Always reinit and retry on any error
+        return await reinitAndRetry(actor, () =>
+          actor.saveCallerUserProfile(profile),
+        );
       }
     },
     onSuccess: () => {
@@ -157,14 +149,11 @@ export function useSubmitFreeChat() {
       let lines: string[];
       try {
         lines = await actor.submitFreeChat(question);
-      } catch (err) {
-        if (isAuthError(err)) {
-          lines = await reinitAndRetry(actor, () =>
-            actor.submitFreeChat(question),
-          );
-        } else {
-          throw err;
-        }
+      } catch {
+        // Always reinit and retry on any error
+        lines = await reinitAndRetry(actor, () =>
+          actor.submitFreeChat(question),
+        );
       }
       // persist locally — ChatEntry uses `answer` field per backend.d.ts
       const entry: ChatEntry = {

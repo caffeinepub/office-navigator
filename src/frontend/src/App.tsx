@@ -2811,21 +2811,37 @@ function AuthenticatedApp() {
       {/* 90-Day Goal Banner */}
       {(mode === "matrix" || mode === "chat") &&
         (() => {
-          const goalData = (() => {
-            try {
-              return JSON.parse(
-                localStorage.getItem("wc_90day_goal") ?? "null",
-              );
-            } catch {
-              return null;
-            }
-          })();
-          if (!goalData) return null;
-          const start = new Date(goalData.startDate).getTime();
-          const end = new Date(goalData.targetDate).getTime();
-          const now = Date.now();
-          const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
-          const daysLeft = Math.max(0, Math.round((end - now) / 86400000));
+          const goals = loadGoals();
+          if (goals.length === 0) return null;
+          if (goals.length === 1) {
+            const g = goals[0];
+            const end = new Date(g.targetDate).getTime();
+            const start = new Date(g.startDate).getTime();
+            const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
+            const daysLeft = Math.max(
+              0,
+              Math.round((end - Date.now()) / 86400000),
+            );
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 text-sm font-body"
+                data-ocid="goals.panel"
+              >
+                <Target className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span className="flex-1 text-amber-800 dark:text-amber-300 truncate font-medium">
+                  🎯 Goal: {g.goal}
+                </span>
+                <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold whitespace-nowrap">
+                  {daysLeft}d left of {daysTotal}d
+                </span>
+              </motion.div>
+            );
+          }
+          const activeGoals = goals.filter(
+            (g) => new Date(g.targetDate).getTime() > Date.now(),
+          );
           return (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
@@ -2834,11 +2850,11 @@ function AuthenticatedApp() {
               data-ocid="goals.panel"
             >
               <Target className="w-4 h-4 text-amber-600 flex-shrink-0" />
-              <span className="flex-1 text-amber-800 dark:text-amber-300 truncate font-medium">
-                🎯 Goal: {goalData.goal}
+              <span className="flex-1 text-amber-800 dark:text-amber-300 font-medium">
+                🎯 {goals.length} active goals
               </span>
               <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold whitespace-nowrap">
-                {daysLeft}d left of {daysTotal}d
+                {activeGoals.length} in progress
               </span>
             </motion.div>
           );
@@ -3990,6 +4006,7 @@ const INDUSTRY_OPTIONS = [
 // ─── 90-Day Goal Tracker ──────────────────────────────────────────────────────
 
 interface GoalData {
+  id: string;
   goal: string;
   startDate: string;
   targetDate: string;
@@ -3998,292 +4015,411 @@ interface GoalData {
 
 const GOAL_KEY = "wc_90day_goal";
 
-function GoalTrackerTab() {
-  const [goalData, setGoalData] = useState<GoalData | null>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(GOAL_KEY) ?? "null");
-    } catch {
-      return null;
+function loadGoals(): GoalData[] {
+  try {
+    const raw = localStorage.getItem(GOAL_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Migration: if old single-object format, wrap in array
+    if (!Array.isArray(parsed)) {
+      return [{ id: crypto.randomUUID(), ...parsed }];
     }
-  });
-  const [goalInput, setGoalInput] = useState("");
-  const [targetDate, setTargetDate] = useState(() => {
+    return parsed as GoalData[];
+  } catch {
+    return [];
+  }
+}
+
+function saveGoals(goals: GoalData[]) {
+  localStorage.setItem(GOAL_KEY, JSON.stringify(goals));
+}
+
+function GoalTrackerTab() {
+  const [goals, setGoals] = useState<GoalData[]>(() => loadGoals());
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addGoalInput, setAddGoalInput] = useState("");
+  const [addTargetDate, setAddTargetDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 90);
     return d.toISOString().split("T")[0];
   });
-  const [milestoneInput, setMilestoneInput] = useState("");
-  const [editing, setEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editGoalInput, setEditGoalInput] = useState("");
+  const [editTargetDate, setEditTargetDate] = useState("");
+  const [milestoneInputs, setMilestoneInputs] = useState<
+    Record<string, string>
+  >({});
 
-  const saveGoal = () => {
-    if (!goalInput.trim()) {
+  const persist = (updated: GoalData[]) => {
+    saveGoals(updated);
+    setGoals(updated);
+  };
+
+  const addGoal = () => {
+    if (!addGoalInput.trim()) {
       toast.error("Please enter a goal.");
       return;
     }
-    const data: GoalData = {
-      goal: goalInput.trim(),
+    const newGoal: GoalData = {
+      id: crypto.randomUUID(),
+      goal: addGoalInput.trim(),
       startDate: new Date().toISOString(),
-      targetDate,
+      targetDate: addTargetDate,
       milestones: [],
     };
-    localStorage.setItem(GOAL_KEY, JSON.stringify(data));
-    setGoalData(data);
-    setEditing(false);
-    toast.success("90-day goal set!");
-  };
-
-  const clearGoal = () => {
-    localStorage.removeItem(GOAL_KEY);
-    setGoalData(null);
-    setGoalInput("");
+    persist([...goals, newGoal]);
+    setAddGoalInput("");
     const d = new Date();
     d.setDate(d.getDate() + 90);
-    setTargetDate(d.toISOString().split("T")[0]);
+    setAddTargetDate(d.toISOString().split("T")[0]);
+    setShowAddForm(false);
+    toast.success("Goal added!");
   };
 
-  const addMilestone = () => {
-    if (!milestoneInput.trim() || !goalData) return;
-    const updated = {
-      ...goalData,
-      milestones: [
-        ...goalData.milestones,
-        {
-          text: milestoneInput.trim(),
-          date: new Date().toISOString(),
-          done: false,
-        },
-      ],
-    };
-    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
-    setGoalData(updated);
-    setMilestoneInput("");
+  const deleteGoal = (id: string) => {
+    persist(goals.filter((g) => g.id !== id));
+    toast.success("Goal removed.");
   };
 
-  const toggleMilestone = (idx: number) => {
-    if (!goalData) return;
-    const milestones = goalData.milestones.map((m, i) =>
-      i === idx ? { ...m, done: !m.done } : m,
+  const startEdit = (g: GoalData) => {
+    setEditingId(g.id);
+    setEditGoalInput(g.goal);
+    setEditTargetDate(g.targetDate);
+  };
+
+  const saveEdit = () => {
+    if (!editGoalInput.trim() || !editingId) return;
+    persist(
+      goals.map((g) =>
+        g.id === editingId
+          ? { ...g, goal: editGoalInput.trim(), targetDate: editTargetDate }
+          : g,
+      ),
     );
-    const updated = { ...goalData, milestones };
-    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
-    setGoalData(updated);
+    setEditingId(null);
+    toast.success("Goal updated!");
   };
 
-  const deleteMilestone = (idx: number) => {
-    if (!goalData) return;
-    const milestones = goalData.milestones.filter((_, i) => i !== idx);
-    const updated = { ...goalData, milestones };
-    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
-    setGoalData(updated);
+  const addMilestone = (goalId: string) => {
+    const text = milestoneInputs[goalId]?.trim();
+    if (!text) return;
+    persist(
+      goals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              milestones: [
+                ...g.milestones,
+                { text, date: new Date().toISOString(), done: false },
+              ],
+            }
+          : g,
+      ),
+    );
+    setMilestoneInputs((prev) => ({ ...prev, [goalId]: "" }));
   };
 
-  if (!goalData || editing) {
-    return (
-      <div className="space-y-5" data-ocid="goals.panel">
-        <div className="space-y-1.5">
-          <Label className="text-sm font-medium font-body">
-            What is your 90-day career goal?
-          </Label>
-          <Textarea
-            data-ocid="goals.textarea"
-            value={goalInput}
-            onChange={(e) => setGoalInput(e.target.value)}
-            placeholder="e.g. Get promoted to Senior Manager by demonstrating leadership in cross-functional projects…"
-            className="min-h-[100px] text-sm font-body resize-none"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-sm font-medium font-body flex items-center gap-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-primary" />
-            Target Date
-          </Label>
-          <input
-            type="date"
-            data-ocid="goals.input"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <div className="flex gap-2">
-          {editing && (
+  const toggleMilestone = (goalId: string, idx: number) => {
+    persist(
+      goals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              milestones: g.milestones.map((m, i) =>
+                i === idx ? { ...m, done: !m.done } : m,
+              ),
+            }
+          : g,
+      ),
+    );
+  };
+
+  const deleteMilestone = (goalId: string, idx: number) => {
+    persist(
+      goals.map((g) =>
+        g.id === goalId
+          ? { ...g, milestones: g.milestones.filter((_, i) => i !== idx) }
+          : g,
+      ),
+    );
+  };
+
+  return (
+    <div className="space-y-5" data-ocid="goals.panel">
+      {/* Add goal button / form */}
+      {showAddForm ? (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
+          <p className="text-sm font-semibold font-body text-amber-700 dark:text-amber-400">
+            New 90-Day Goal
+          </p>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium font-body">
+              What is your goal?
+            </Label>
+            <Textarea
+              data-ocid="goals.textarea"
+              value={addGoalInput}
+              onChange={(e) => setAddGoalInput(e.target.value)}
+              placeholder="e.g. Get promoted to Senior Manager by demonstrating leadership…"
+              className="min-h-[90px] text-sm font-body resize-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium font-body flex items-center gap-1.5">
+              <CalendarDays className="w-3.5 h-3.5 text-primary" />
+              Target Date
+            </Label>
+            <input
+              type="date"
+              data-ocid="goals.input"
+              value={addTargetDate}
+              onChange={(e) => setAddTargetDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setEditing(false)}
+              onClick={() => setShowAddForm(false)}
               className="font-body"
               data-ocid="goals.cancel_button"
             >
               Cancel
             </Button>
-          )}
-          <Button
-            data-ocid="goals.submit_button"
-            onClick={saveGoal}
-            disabled={!goalInput.trim()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
-          >
-            <Target className="w-4 h-4" />
-            {editing ? "Update Goal" : "Set My 90-Day Goal"}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const start = new Date(goalData.startDate).getTime();
-  const end = new Date(goalData.targetDate).getTime();
-  const now = Date.now();
-  const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
-  const daysElapsed = Math.max(0, Math.round((now - start) / 86400000));
-  const daysLeft = Math.max(0, daysTotal - daysElapsed);
-  const progressPct = Math.min(
-    100,
-    Math.round((daysElapsed / daysTotal) * 100),
-  );
-  const doneMilestones = goalData.milestones.filter((m) => m.done).length;
-
-  return (
-    <div className="space-y-6" data-ocid="goals.panel">
-      {/* Goal card */}
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide font-body mb-1">
-              Your 90-Day Goal
-            </p>
-            <p className="text-base font-bold text-foreground font-display leading-snug">
-              {goalData.goal}
-            </p>
-          </div>
-          <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              type="button"
-              data-ocid="goals.edit_button"
-              onClick={() => {
-                setGoalInput(goalData.goal);
-                setTargetDate(goalData.targetDate);
-                setEditing(true);
-              }}
-              className="p-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 transition-colors"
+            <Button
+              data-ocid="goals.submit_button"
+              onClick={addGoal}
+              disabled={!addGoalInput.trim()}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
             >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              data-ocid="goals.delete_button"
-              onClick={clearGoal}
-              className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+              <Target className="w-4 h-4" />
+              Save Goal
+            </Button>
           </div>
         </div>
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs font-body text-muted-foreground">
-            <span>{daysElapsed}d elapsed</span>
-            <span className="font-semibold text-amber-600 dark:text-amber-400">
-              {daysLeft}d remaining of {daysTotal}d
-            </span>
-          </div>
-          <div className="w-full h-2 rounded-full bg-amber-100 dark:bg-amber-900/40 overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPct}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="h-full bg-amber-400 dark:bg-amber-500 rounded-full"
-            />
-          </div>
-          <p className="text-xs text-right text-amber-600 font-body font-semibold">
-            {progressPct}% time elapsed
+      ) : (
+        <Button
+          data-ocid="goals.primary_button"
+          onClick={() => setShowAddForm(true)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Goal
+        </Button>
+      )}
+
+      {/* Goals list */}
+      {goals.length === 0 ? (
+        <div
+          data-ocid="goals.empty_state"
+          className="text-center py-12 border border-dashed border-border rounded-xl"
+        >
+          <Target className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground font-body">
+            No goals yet. Add your first 90-day goal!
           </p>
         </div>
-        <div className="flex gap-2 text-xs">
-          <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-full font-body">
-            <CalendarDays className="w-3 h-3 inline mr-1" />
-            Target: {new Date(goalData.targetDate).toLocaleDateString()}
-          </span>
-          {doneMilestones > 0 && (
-            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full font-body">
-              ✓ {doneMilestones}/{goalData.milestones.length} milestones done
-            </span>
-          )}
-        </div>
-      </div>
+      ) : (
+        <div className="space-y-5" data-ocid="goals.list">
+          {goals.map((g, gIdx) => {
+            const start = new Date(g.startDate).getTime();
+            const end = new Date(g.targetDate).getTime();
+            const now = Date.now();
+            const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
+            const daysElapsed = Math.max(
+              0,
+              Math.round((now - start) / 86400000),
+            );
+            const daysLeft = Math.max(0, daysTotal - daysElapsed);
+            const progressPct = Math.min(
+              100,
+              Math.round((daysElapsed / daysTotal) * 100),
+            );
+            const doneMilestones = g.milestones.filter((m) => m.done).length;
+            const isEditing = editingId === g.id;
 
-      {/* Milestones */}
-      <div className="space-y-3">
-        <p className="text-sm font-semibold font-body text-foreground">
-          Milestones
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            data-ocid="goals.input"
-            value={milestoneInput}
-            onChange={(e) => setMilestoneInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addMilestone();
-            }}
-            placeholder="Add a milestone…"
-            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <Button
-            size="sm"
-            data-ocid="goals.primary_button"
-            onClick={addMilestone}
-            disabled={!milestoneInput.trim()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add
-          </Button>
-        </div>
-        {goalData.milestones.length === 0 ? (
-          <div
-            data-ocid="goals.empty_state"
-            className="text-center py-8 border border-dashed border-border rounded-xl"
-          >
-            <p className="text-sm text-muted-foreground font-body">
-              No milestones yet. Break your goal into steps!
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2" data-ocid="goals.list">
-            {goalData.milestones.map((m, i) => (
+            return (
               <motion.div
-                key={`milestone-${m.text.slice(0, 20)}-${m.date}`}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                data-ocid={`goals.item.${i + 1}`}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${m.done ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-card border-border"}`}
+                key={g.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: gIdx * 0.05 }}
+                data-ocid={`goals.item.${gIdx + 1}`}
+                className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4"
               >
-                <input
-                  type="checkbox"
-                  data-ocid={`goals.checkbox.${i + 1}`}
-                  checked={m.done}
-                  onChange={() => toggleMilestone(i)}
-                  className="w-4 h-4 accent-primary cursor-pointer"
-                />
-                <span
-                  className={`flex-1 text-sm font-body ${m.done ? "line-through text-muted-foreground" : "text-foreground"}`}
-                >
-                  {m.text}
-                </span>
-                <button
-                  type="button"
-                  data-ocid={`goals.delete_button.${i + 1}`}
-                  onClick={() => deleteMilestone(i)}
-                  className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <Textarea
+                      value={editGoalInput}
+                      onChange={(e) => setEditGoalInput(e.target.value)}
+                      className="min-h-[80px] text-sm font-body resize-none"
+                    />
+                    <input
+                      type="date"
+                      value={editTargetDate}
+                      onChange={(e) => setEditTargetDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingId(null)}
+                        className="font-body"
+                        data-ocid={`goals.cancel_button.${gIdx + 1}`}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={saveEdit}
+                        className="font-body bg-primary text-primary-foreground"
+                        data-ocid={`goals.save_button.${gIdx + 1}`}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide font-body mb-1">
+                          Goal {gIdx + 1}
+                        </p>
+                        <p className="text-base font-bold text-foreground font-display leading-snug">
+                          {g.goal}
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          data-ocid={`goals.edit_button.${gIdx + 1}`}
+                          onClick={() => startEdit(g)}
+                          className="p-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          data-ocid={`goals.delete_button.${gIdx + 1}`}
+                          onClick={() => deleteGoal(g.id)}
+                          className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-body text-muted-foreground">
+                        <span>{daysElapsed}d elapsed</span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">
+                          {daysLeft}d remaining of {daysTotal}d
+                        </span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-amber-100 dark:bg-amber-900/40 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progressPct}%` }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
+                          className="h-full bg-amber-400 dark:bg-amber-500 rounded-full"
+                        />
+                      </div>
+                      <p className="text-xs text-right text-amber-600 font-body font-semibold">
+                        {progressPct}% time elapsed
+                      </p>
+                    </div>
+                    <div className="flex gap-2 flex-wrap text-xs">
+                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-full font-body">
+                        <CalendarDays className="w-3 h-3 inline mr-1" />
+                        Target: {new Date(g.targetDate).toLocaleDateString()}
+                      </span>
+                      {doneMilestones > 0 && (
+                        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full font-body">
+                          ✓ {doneMilestones}/{g.milestones.length} milestones
+                          done
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Milestones for this goal */}
+                <div className="space-y-2 pt-1 border-t border-amber-200/60 dark:border-amber-800/60">
+                  <p className="text-xs font-semibold font-body text-amber-700 dark:text-amber-400 pt-1">
+                    Milestones
+                  </p>
+                  {g.milestones.length === 0 ? (
+                    <p className="text-xs text-muted-foreground font-body">
+                      No milestones yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {g.milestones.map((m, mIdx) => (
+                        <div
+                          key={`${g.id}-m-${mIdx}`}
+                          data-ocid={`goals.row.${gIdx + 1}`}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${m.done ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-white/60 dark:bg-white/5 border-amber-100 dark:border-amber-900"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            data-ocid={`goals.checkbox.${gIdx + 1}`}
+                            checked={m.done}
+                            onChange={() => toggleMilestone(g.id, mIdx)}
+                            className="w-4 h-4 accent-primary cursor-pointer flex-shrink-0"
+                          />
+                          <span
+                            className={`flex-1 text-sm font-body ${m.done ? "line-through text-muted-foreground" : "text-foreground"}`}
+                          >
+                            {m.text}
+                          </span>
+                          <button
+                            type="button"
+                            data-ocid={`goals.delete_button.${gIdx + 1}`}
+                            onClick={() => deleteMilestone(g.id, mIdx)}
+                            className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      data-ocid={`goals.input.${gIdx + 1}`}
+                      value={milestoneInputs[g.id] ?? ""}
+                      onChange={(e) =>
+                        setMilestoneInputs((prev) => ({
+                          ...prev,
+                          [g.id]: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addMilestone(g.id);
+                      }}
+                      placeholder="Add a milestone…"
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      size="sm"
+                      data-ocid={`goals.secondary_button.${gIdx + 1}`}
+                      onClick={() => addMilestone(g.id)}
+                      disabled={!milestoneInputs[g.id]?.trim()}
+                      className="bg-amber-500 hover:bg-amber-600 text-white font-body gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add
+                    </Button>
+                  </div>
+                </div>
               </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
