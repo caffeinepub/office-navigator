@@ -6,7 +6,9 @@ import {
   MatrixWho,
   type Scenario,
   type UserProfile,
+  type backendInterface,
 } from "../backend.d";
+import { getSecretParameter } from "../utils/urlParams";
 import { useActor } from "./useActor";
 import { useAuthState } from "./useAuthState";
 
@@ -34,6 +36,20 @@ function isAuthError(err: unknown): boolean {
     msg.includes("not registered") ||
     msg.includes("Only users")
   );
+}
+
+// Re-register the caller with the backend access control, then retry
+async function reinitAndRetry<T>(
+  actor: backendInterface,
+  fn: () => Promise<T>,
+): Promise<T> {
+  try {
+    const adminToken = getSecretParameter("caffeineAdminToken") ?? "";
+    await actor._initializeAccessControlWithSecret(adminToken);
+  } catch {
+    // ignore reinit errors — try the original call anyway
+  }
+  return fn();
 }
 
 export function useGetRecentSubmissions() {
@@ -65,7 +81,9 @@ export function useSubmitScenario() {
         lines = await actor.submitScenario(text, who, challengeType);
       } catch (err) {
         if (isAuthError(err)) {
-          lines = await actor.submitScenario(text, who, challengeType);
+          lines = await reinitAndRetry(actor, () =>
+            actor.submitScenario(text, who, challengeType),
+          );
         } else {
           throw err;
         }
@@ -117,7 +135,9 @@ export function useSaveCallerUserProfile() {
         return await actor.saveCallerUserProfile(profile);
       } catch (err) {
         if (isAuthError(err)) {
-          return await actor.saveCallerUserProfile(profile);
+          return await reinitAndRetry(actor, () =>
+            actor.saveCallerUserProfile(profile),
+          );
         }
         throw err;
       }
@@ -139,7 +159,9 @@ export function useSubmitFreeChat() {
         lines = await actor.submitFreeChat(question);
       } catch (err) {
         if (isAuthError(err)) {
-          lines = await actor.submitFreeChat(question);
+          lines = await reinitAndRetry(actor, () =>
+            actor.submitFreeChat(question),
+          );
         } else {
           throw err;
         }
