@@ -663,28 +663,112 @@ function pickVoice(
   gender: "male" | "female",
 ): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
-  const malePref = [
-    "Alex",
-    "Daniel",
-    "Google UK English Male",
-    "Google US English",
-  ];
-  const femalePref = [
+
+  // Known female voice names across browsers/OS
+  const femaleNames = [
     "Samantha",
     "Karen",
-    "Google UK English Female",
     "Victoria",
+    "Moira",
+    "Tessa",
+    "Fiona",
+    "Ava",
+    "Allison",
+    "Susan",
+    "Zoe",
+    "Nicky",
+    "Siri Female",
+    "Google UK English Female",
+    "Google US English Female",
+    "Microsoft Zira",
+    "Microsoft Hazel",
+    "Microsoft Susan",
+    "Microsoft Linda",
+    "Microsoft Jenny",
+    "Microsoft Aria",
+    "Microsoft Emma",
+    "Microsoft Clara",
+    "Microsoft Natasha",
+    "Microsoft Libby",
+    "Microsoft Mia",
+    "Microsoft Leah",
+    "Alice",
+    "Amelie",
+    "Anna",
+    "Carmit",
+    "Damayanti",
+    "Ellen",
+    "Ioana",
+    "Joana",
+    "Kanya",
+    "Kyoko",
+    "Laura",
+    "Lekha",
+    "Luciana",
+    "Mariska",
+    "Mei-Jia",
+    "Melina",
+    "Milena",
+    "Monica",
+    "Nora",
+    "Paulina",
+    "Rishi",
+    "Sara",
+    "Satu",
+    "Sin-Ji",
+    "Soledad",
+    "Taini",
+    "Tessa",
+    "Ting-Ting",
+    "Xander",
+    "Yelda",
+    "Yuna",
+    "Zosia",
   ];
+
+  // Known male voice names
+  const maleNames = [
+    "Alex",
+    "Daniel",
+    "Fred",
+    "Jorge",
+    "Juan",
+    "Lee",
+    "Luca",
+    "Maged",
+    "Markus",
+    "Tomas",
+    "Yannick",
+    "Google UK English Male",
+    "Google US English",
+    "Microsoft David",
+    "Microsoft Mark",
+    "Microsoft George",
+    "Microsoft Richard",
+    "Microsoft James",
+    "Microsoft Ryan",
+  ];
+
   if (gender === "female") {
+    // 1. Exact name match from known female list
     const byName = voices.find((v) =>
-      femalePref.some((p) => v.name.includes(p)),
+      femaleNames.some((p) => v.name.includes(p)),
     );
     if (byName) return byName;
+    // 2. Name contains "female"
     const byLabel = voices.find((v) => v.name.toLowerCase().includes("female"));
     if (byLabel) return byLabel;
-    return voices[1] ?? voices[0];
+    // 3. Exclude known male voices and pick first remaining
+    const notMale = voices.filter(
+      (v) =>
+        !maleNames.some((p) => v.name.includes(p)) &&
+        !v.name.toLowerCase().includes("male"),
+    );
+    return notMale[0] ?? voices[0];
   }
-  const byName = voices.find((v) => malePref.some((p) => v.name.includes(p)));
+
+  // Male selection
+  const byName = voices.find((v) => maleNames.some((p) => v.name.includes(p)));
   if (byName) return byName;
   const byLabel = voices.find((v) => v.name.toLowerCase().includes("male"));
   if (byLabel) return byLabel;
