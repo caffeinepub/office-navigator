@@ -11,14 +11,21 @@ export function useActor() {
   const actorQuery = useQuery<backendInterface>({
     queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
     queryFn: async () => {
-      const actorOptions = identity
-        ? { agentOptions: { identity } }
-        : undefined;
-      // Do NOT call _initializeAccessControlWithSecret — the backend only checks
-      // caller.isAnonymous() and does not need any registration step.
+      const isAuthenticated = !!identity;
+
+      if (!isAuthenticated) {
+        return await createActorWithConfig();
+      }
+
+      const actorOptions = {
+        agentOptions: {
+          identity,
+        },
+      };
+
       return await createActorWithConfig(actorOptions);
     },
-    staleTime: 8 * 60 * 1000, // 8 minutes — auto-refreshes after deploys
+    staleTime: 8 * 60 * 1000, // 8 minutes
     enabled: true,
   });
 
