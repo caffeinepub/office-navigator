@@ -1,3 +1,4 @@
+import type { Identity } from "@icp-sdk/core/agent";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
@@ -6,11 +7,11 @@ import {
   MatrixWho,
   type Scenario,
   type UserProfile,
-  type backendInterface,
 } from "../backend.d";
-import { getSecretParameter } from "../utils/urlParams";
+import { createActorWithConfig } from "../config";
 import { useActor } from "./useActor";
 import { useAuthState } from "./useAuthState";
+import { useInternetIdentity } from "./useInternetIdentity";
 
 export { MatrixWho, MatrixType };
 export type { ChatEntry };
@@ -28,19 +29,18 @@ function loadFromLS<T>(key: string): T[] {
   }
 }
 
-// Re-register the caller with the backend access control, then retry.
-// Always reinit on any failure — _initializeAccessControlWithSecret is idempotent.
-async function reinitAndRetry<T>(
-  actor: backendInterface,
-  fn: () => Promise<T>,
+/**
+ * Fallback: always create a fresh actor with a new HTTP agent.
+ * The backend only checks caller.isAnonymous() — no role registration needed.
+ */
+async function freshActorCall<T>(
+  identity: Identity | undefined,
+  fn: (actor: Awaited<ReturnType<typeof createActorWithConfig>>) => Promise<T>,
 ): Promise<T> {
-  try {
-    const adminToken = getSecretParameter("caffeineAdminToken") ?? "";
-    await actor._initializeAccessControlWithSecret(adminToken);
-  } catch {
-    // ignore reinit errors — proceed with the retry anyway
-  }
-  return fn();
+  const actor = await createActorWithConfig(
+    identity ? { agentOptions: { identity } } : undefined,
+  );
+  return fn(actor);
 }
 
 export function useGetRecentSubmissions() {
@@ -59,6 +59,7 @@ export function useGetRecentSubmissions() {
 
 export function useSubmitScenario() {
   const { actor } = useActor();
+  const { identity } = useInternetIdentity();
 
   return useMutation<
     string[],
@@ -66,17 +67,15 @@ export function useSubmitScenario() {
     { text: string; who: MatrixWho | null; challengeType: MatrixType | null }
   >({
     mutationFn: async ({ text, who, challengeType }) => {
-      if (!actor) throw new Error("Actor not ready");
       let lines: string[];
       try {
+        if (!actor) throw new Error("no actor");
         lines = await actor.submitScenario(text, who, challengeType);
       } catch {
-        // Always reinit and retry on any error
-        lines = await reinitAndRetry(actor, () =>
-          actor.submitScenario(text, who, challengeType),
+        lines = await freshActorCall(identity, (a) =>
+          a.submitScenario(text, who, challengeType),
         );
       }
-      // persist locally
       const entry: Scenario = {
         text,
         who: who ?? undefined,
@@ -98,39 +97,40 @@ export function useSubmitScenario() {
 export function useGetCallerUserProfile() {
   const { actor, isFetching } = useActor();
   const { isAuthenticated } = useAuthState();
+  const { identity } = useInternetIdentity();
   return useQuery<UserProfile | null>({
     queryKey: ["callerUserProfile"],
     queryFn: async () => {
-      if (!actor) return null;
       try {
+        if (!actor) throw new Error("no actor");
         return await actor.getCallerUserProfile();
       } catch {
-        // Try reinit then fetch again
         try {
-          await reinitAndRetry(actor, async () => {});
-          return await actor.getCallerUserProfile();
+          return await freshActorCall(identity, (a) =>
+            a.getCallerUserProfile(),
+          );
         } catch {
           return null;
         }
       }
     },
-    enabled: !!actor && !isFetching && isAuthenticated,
+    enabled: !isFetching && isAuthenticated,
   });
 }
 
 export function useSaveCallerUserProfile() {
   const { actor } = useActor();
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, UserProfile>({
     mutationFn: async (profile) => {
-      if (!actor) throw new Error("Actor not ready");
       try {
+        if (!actor) throw new Error("no actor");
         return await actor.saveCallerUserProfile(profile);
       } catch {
-        // Always reinit and retry on any error
-        return await reinitAndRetry(actor, () =>
-          actor.saveCallerUserProfile(profile),
+        return await freshActorCall(identity, (a) =>
+          a.saveCallerUserProfile(profile),
         );
       }
     },
@@ -142,20 +142,19 @@ export function useSaveCallerUserProfile() {
 
 export function useSubmitFreeChat() {
   const { actor } = useActor();
+  const { identity } = useInternetIdentity();
 
   return useMutation<string[], Error, string>({
     mutationFn: async (question) => {
-      if (!actor) throw new Error("Actor not ready");
       let lines: string[];
       try {
+        if (!actor) throw new Error("no actor");
         lines = await actor.submitFreeChat(question);
       } catch {
-        // Always reinit and retry on any error
-        lines = await reinitAndRetry(actor, () =>
-          actor.submitFreeChat(question),
+        lines = await freshActorCall(identity, (a) =>
+          a.submitFreeChat(question),
         );
       }
-      // persist locally — ChatEntry uses `answer` field per backend.d.ts
       const entry: ChatEntry = {
         question,
         answer: lines,

@@ -690,9 +690,37 @@ function getActiveGoalContext(): string {
   }
 }
 
-function buildPrompt(text: string, tone: string): string {
+const LANG_LOCALE_MAP: Record<string, string> = {
+  en: "en-US",
+  hi: "hi-IN",
+  te: "te-IN",
+  ta: "ta-IN",
+  kn: "kn-IN",
+  mr: "mr-IN",
+  bn: "bn-IN",
+  or: "or-IN",
+  es: "es-ES",
+  fr: "fr-FR",
+  ar: "ar-SA",
+  zh: "zh-CN",
+  pt: "pt-BR",
+  ru: "ru-RU",
+  ja: "ja-JP",
+  de: "de-DE",
+  id: "id-ID",
+};
+
+function buildPrompt(text: string, tone: string, language = "English"): string {
+  const langInstruction =
+    language !== "English"
+      ? `[LANGUAGE: The user is writing in ${language}. Respond entirely in ${language}. Do not use English in your response.] `
+      : "";
   return (
-    SAFETY_PREFIX + (TONE_PREFIXES[tone] ?? "") + getActiveGoalContext() + text
+    SAFETY_PREFIX +
+    langInstruction +
+    (TONE_PREFIXES[tone] ?? "") +
+    getActiveGoalContext() +
+    text
   );
 }
 
@@ -828,7 +856,8 @@ function pickVoice(
 function AudioPlaybackBar({
   insights,
   microActions,
-}: { insights: string[]; microActions: string[] }) {
+  lang,
+}: { insights: string[]; microActions: string[]; lang?: string }) {
   const [voicePref, setVoicePref] = useState<"male" | "female">(() => {
     const stored = localStorage.getItem("wc_voice_pref");
     return stored === "female" ? "female" : "male";
@@ -851,6 +880,7 @@ function AudioPlaybackBar({
     }
     if (!fullText.trim()) return;
     const utter = new SpeechSynthesisUtterance(fullText);
+    if (lang) utter.lang = lang;
     const voice = pickVoice(voices, voicePref);
     if (voice) utter.voice = voice;
     utter.rate = 0.95;
@@ -1152,6 +1182,7 @@ function ExportCardModal({
 // ─── Saved (Bookmarks) Tab ─────────────────────────────────────────────────────
 
 function SavedTab() {
+  const { t } = useLanguage();
   const { bookmarks, removeBookmark } = useBookmarks();
 
   if (bookmarks.length === 0) {
@@ -1164,7 +1195,7 @@ function SavedTab() {
           <Bookmark className="w-5 h-5 text-muted-foreground" />
         </div>
         <p className="font-body text-sm text-muted-foreground">
-          No saved insights yet.
+          {t("msg_noBookmarks")}
         </p>
         <p className="font-body text-xs text-muted-foreground/70 mt-1">
           Bookmark insights from your coaching sessions.
@@ -1220,6 +1251,7 @@ function SavedTab() {
 // ─── Journal Tab ───────────────────────────────────────────────────────────────
 
 function JournalTab() {
+  const { t } = useLanguage();
   const { entries, addEntry, deleteEntry } = useJournal();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -1255,14 +1287,14 @@ function JournalTab() {
           data-ocid="journal.input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Entry title…"
+          placeholder={t("placeholder_journalTitle")}
           className="font-body"
         />
         <Textarea
           data-ocid="journal.textarea"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Reflect on a workplace situation, what you learned, or how you grew…"
+          placeholder={t("placeholder_journalBody")}
           className="min-h-[120px] text-sm font-body resize-none"
         />
         <div className="flex justify-end">
@@ -1535,6 +1567,7 @@ function ReframeTab({
   coachingTone,
   onToneChange,
 }: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
+  const { t, language, languageNames } = useLanguage();
   const [situation, setSituation] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
   const [showDialog, setShowDialog] = useState(false);
@@ -1550,13 +1583,17 @@ function ReframeTab({
       "[REFRAME ENGINE: The user wants to reframe a negative workplace situation as a growth opportunity. Reframe positively, find the hidden lesson, the strength it reveals, and 2-3 concrete next steps.] Situation: ";
     try {
       const res = await submitChat.mutateAsync(
-        buildPrompt(prefix + situation.trim(), coachingTone),
+        buildPrompt(
+          prefix + situation.trim(),
+          coachingTone,
+          languageNames[language],
+        ),
       );
       setResult(res);
       setShowDialog(true);
       storeFollowupPending(situation.trim().slice(0, 60), "reframe");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("msg_error"));
     }
   };
 
@@ -1579,7 +1616,7 @@ function ReframeTab({
             data-ocid="reframe.textarea"
             value={situation}
             onChange={(e) => setSituation(e.target.value)}
-            placeholder="e.g. I was passed over for promotion despite delivering excellent results this year..."
+            placeholder={t("placeholder_reframe")}
             className="min-h-[140px] text-sm font-body resize-none"
           />
         </div>
@@ -1654,6 +1691,7 @@ function ReframeTab({
                   <AudioPlaybackBar
                     insights={resultParsed.insights}
                     microActions={resultParsed.microActions}
+                    lang={LANG_LOCALE_MAP[language]}
                   />
                   <div className="mt-4 pt-3 border-t border-border/40">
                     <FeedbackWidget
@@ -1702,6 +1740,7 @@ function ScriptBuilderTab({
   coachingTone,
   onToneChange,
 }: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
+  const { t, language, languageNames } = useLanguage();
   const [scenarioType, setScenarioType] = useState("");
   const [context, setContext] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
@@ -1717,13 +1756,13 @@ function ScriptBuilderTab({
     const prompt = `[SCRIPT BUILDER: Generate a practical, professional, word-for-word communication script and email template. Include: Opening line, Key points to cover, Exact phrases to use, How to close the conversation positively.] Scenario type: ${scenarioType}. Context: ${context.trim() || "No additional context provided."}`;
     try {
       const res = await submitChat.mutateAsync(
-        buildPrompt(prompt, coachingTone),
+        buildPrompt(prompt, coachingTone, languageNames[language]),
       );
       setResult(res);
       setShowDialog(true);
       storeFollowupPending(scenarioType, "script");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("msg_error"));
     }
   };
 
@@ -1773,7 +1812,7 @@ function ScriptBuilderTab({
             data-ocid="scripts.textarea"
             value={context}
             onChange={(e) => setContext(e.target.value)}
-            placeholder="Any specific details about your situation, relationship dynamics, or what outcome you want..."
+            placeholder={t("placeholder_script")}
             className="min-h-[100px] text-sm font-body resize-none"
           />
         </div>
@@ -1848,6 +1887,7 @@ function ScriptBuilderTab({
                   <AudioPlaybackBar
                     insights={resultParsed.insights}
                     microActions={resultParsed.microActions}
+                    lang={LANG_LOCALE_MAP[language]}
                   />
                   <div className="mt-4 pt-3 border-t border-border/40">
                     <FeedbackWidget
@@ -2176,6 +2216,7 @@ function PracticeTab({
   coachingTone,
   onToneChange,
 }: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
+  const { t, language, languageNames } = useLanguage();
   const [completions, setCompletions] = useState<string[]>(
     getPracticeCompletions,
   );
@@ -2194,14 +2235,14 @@ function PracticeTab({
     const rawPrompt = `The user is practicing a workplace scenario. Scenario: ${activeScenario.context}. Question: ${activeScenario.question}. They chose: "${selectedOption}".${freeText.trim() ? ` Additional thoughts: ${freeText.trim()}.` : ""} Give structured coaching on whether this is a strong approach, what risks it carries, and what alternative approaches they might consider. End with a 'Try This Today' action.`;
     try {
       const result = await submitChat.mutateAsync(
-        buildPrompt(rawPrompt, coachingTone),
+        buildPrompt(rawPrompt, coachingTone, languageNames[language]),
       );
       setCoachingResult(result);
       setShowResultDialog(true);
       savePracticeCompletion(activeScenario.id);
       setCompletions(getPracticeCompletions());
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("msg_error"));
     }
   };
 
@@ -2335,7 +2376,7 @@ function PracticeTab({
             data-ocid="practice.textarea"
             value={freeText}
             onChange={(e) => setFreeText(e.target.value)}
-            placeholder="Any context, concerns, or additional thoughts about this situation..."
+            placeholder={t("placeholder_scenario")}
             className="min-h-[80px] text-sm font-body resize-none"
           />
         </div>
@@ -2408,6 +2449,7 @@ function PracticeTab({
                         <AudioPlaybackBar
                           insights={insights}
                           microActions={microActions}
+                          lang={LANG_LOCALE_MAP[language]}
                         />
                       </>
                     );
@@ -2449,6 +2491,7 @@ function AskCoachPanel({
   coachingTone,
   onToneChange,
 }: { coachingTone: CoachingTone; onToneChange: (t: CoachingTone) => void }) {
+  const { t, language, languageNames } = useLanguage();
   const [question, setQuestion] = useState("");
   const [chatInsights, setChatInsights] = useState<string[] | null>(null);
   const [showChatDialog, setShowChatDialog] = useState(false);
@@ -2494,14 +2537,18 @@ function AskCoachPanel({
       tone !== "neutral"
         ? `The user appears to be feeling ${tone}. Begin your response with a single empathetic sentence acknowledging their emotional state before moving into practical coaching. Question: ${trimmed}`
         : trimmed;
-    const promptWithTone = buildPrompt(emotionPrefix, coachingTone);
+    const promptWithTone = buildPrompt(
+      emotionPrefix,
+      coachingTone,
+      languageNames[language],
+    );
     try {
       const result = await submitChat.mutateAsync(promptWithTone);
       setChatInsights(result);
       setShowChatDialog(true);
       storeFollowupPending(trimmed.slice(0, 60), "coach");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("msg_error"));
     }
   };
 
@@ -2561,7 +2608,7 @@ function AskCoachPanel({
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
                   handleSubmit();
               }}
-              placeholder='e.g. "How do I handle a colleague who keeps taking credit for my ideas?"'
+              placeholder={t("placeholder_askCoach")}
               className="min-h-[140px] text-sm font-body resize-none bg-background/60 border-border/80 focus:border-primary focus-visible:ring-primary/30 placeholder:text-muted-foreground/60 leading-relaxed"
             />
             {showSuggestions && filteredSuggestions.length > 0 && (
@@ -2693,6 +2740,7 @@ function AskCoachPanel({
                           <AudioPlaybackBar
                             insights={insights}
                             microActions={microActions}
+                            lang={LANG_LOCALE_MAP[language]}
                           />
                           <div className="mt-4 pt-3 border-t border-border/40">
                             <FeedbackWidget
@@ -2772,6 +2820,7 @@ function AskCoachPanel({
 type AppMode = "matrix" | "chat" | "practice" | "reframe" | "scripts" | "goals";
 
 function AuthenticatedApp() {
+  const { t, language, languageNames } = useLanguage();
   const [mode, setMode] = useState<AppMode>("matrix");
   const [coachingTone, _setCoachingTone] = useState<CoachingTone>("Mentor");
   const [followupBanner, setFollowupBanner] = useState<{
@@ -2860,7 +2909,11 @@ function AuthenticatedApp() {
     setShowConfidencePreModal(false);
     try {
       const result = await submitMutation.mutateAsync({
-        text: buildPrompt(scenarioText.trim(), coachingTone),
+        text: buildPrompt(
+          scenarioText.trim(),
+          coachingTone,
+          languageNames[language],
+        ),
         who: selectedWho!,
         challengeType: selectedType!,
       });
@@ -2873,7 +2926,7 @@ function AuthenticatedApp() {
         "matrix",
       );
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("msg_error"));
     }
   };
 
@@ -2916,7 +2969,7 @@ function AuthenticatedApp() {
             }`}
           >
             <Compass className="w-4 h-4" />
-            Navigate Matrix
+            {t("section_matrixNavigator")}
           </button>
           <button
             type="button"
@@ -2929,7 +2982,7 @@ function AuthenticatedApp() {
             }`}
           >
             <MessageCircle className="w-4 h-4" />
-            Ask Coach
+            {t("nav_askCoach")}
           </button>
           <button
             type="button"
@@ -2942,7 +2995,7 @@ function AuthenticatedApp() {
             }`}
           >
             <Swords className="w-4 h-4" />
-            Practice
+            {t("nav_practice")}
           </button>
           <button
             type="button"
@@ -2955,7 +3008,7 @@ function AuthenticatedApp() {
             }`}
           >
             <RefreshCw className="w-4 h-4" />
-            Reframe It
+            {t("nav_reframe")}
           </button>
           <button
             type="button"
@@ -2968,7 +3021,7 @@ function AuthenticatedApp() {
             }`}
           >
             <FileText className="w-4 h-4" />
-            Script Builder
+            {t("nav_script")}
           </button>
           <button
             type="button"
@@ -3893,6 +3946,7 @@ function AuthenticatedApp() {
                           <AudioPlaybackBar
                             insights={insights}
                             microActions={microActions}
+                            lang={LANG_LOCALE_MAP[language]}
                           />
                           <div className="mt-4 pt-3 border-t border-border/40">
                             <FeedbackWidget
@@ -4084,6 +4138,7 @@ function AuthenticatedApp() {
 // ─── Landing Page (Unauthenticated) ───────────────────────────────────────────
 
 function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
+  const { t } = useLanguage();
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -4412,7 +4467,7 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
           className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold h-11 rounded-xl gap-2"
         >
           <KeyRound className="w-4 h-4" />
-          Sign In to Get Started
+          {t("landing_cta")}
         </Button>
         <p className="text-xs text-muted-foreground mt-3 font-body">
           No password needed — uses Internet Identity.
@@ -5074,6 +5129,7 @@ function SetProfileDialog({
   const [langPrefLocal, setLangPrefLocal] = useState<string>(
     () => localStorage.getItem("wc_language_pref") ?? "English",
   );
+  const { t } = useLanguage();
   const saveMutation = useSaveCallerUserProfile();
 
   useEffect(() => {
@@ -5296,7 +5352,7 @@ function SetProfileDialog({
             onClick={() => onOpenChange(false)}
             className="font-body"
           >
-            Cancel
+            {t("btn_cancel")}
           </Button>
           <Button
             data-ocid="setprofile.save_button"
@@ -5310,7 +5366,7 @@ function SetProfileDialog({
                 Saving…
               </>
             ) : (
-              "Save Profile"
+              t("btn_saveProfile")
             )}
           </Button>
         </DialogFooter>
@@ -5454,7 +5510,7 @@ function MainApp() {
                       className="gap-2 cursor-pointer"
                     >
                       <Pencil className="w-4 h-4" />
-                      {userName ? "Edit Profile" : "Set Up Profile"}
+                      {userName ? t("btn_editProfile") : "Set Up Profile"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -5492,7 +5548,7 @@ function MainApp() {
                       className="gap-2 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                      Export My Data
+                      {t("btn_exportData")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       data-ocid="profile.delete_button"
@@ -5513,7 +5569,7 @@ function MainApp() {
                       className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                     >
                       <Trash2 className="w-4 h-4" />
-                      Clear All My Data
+                      {t("btn_clearData")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -5522,7 +5578,7 @@ function MainApp() {
                       className="text-destructive focus:text-destructive gap-2 cursor-pointer"
                     >
                       <LogOut className="w-4 h-4" />
-                      Sign Out
+                      {t("btn_logout")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -5635,7 +5691,7 @@ function MainApp() {
         </div>
       </footer>
 
-      <Toaster richColors position="top-right" />
+      <Toaster richColors position="bottom-right" />
       <DisclaimerModal />
     </div>
   );
