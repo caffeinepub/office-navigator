@@ -4505,7 +4505,7 @@ function SetProfileDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-md font-body"
+        className="max-w-md font-body flex flex-col max-h-[90vh]"
         data-ocid="setprofile.dialog"
       >
         <DialogHeader>
@@ -4518,7 +4518,7 @@ function SetProfileDialog({
             experience, and industry are optional.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-2 space-y-4">
+        <div className="py-2 space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
           <div className="space-y-1.5">
             <Label
               htmlFor="display-name"
