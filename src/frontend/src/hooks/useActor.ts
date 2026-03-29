@@ -4,6 +4,10 @@ import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
 import { useInternetIdentity } from "./useInternetIdentity";
 
+// CRITICAL: Do NOT add any backend calls here (e.g. _initializeAccessControlWithSecret).
+// The backend only checks caller.isAnonymous() — no initialization call is needed or safe.
+// Adding any actor.someCall() here will silently break ALL buttons in the app.
+
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
   const { identity } = useInternetIdentity();
@@ -23,9 +27,7 @@ export function useActor() {
         },
       };
 
-      // NOTE: Do NOT call any backend methods here (e.g. _initializeAccessControlWithSecret).
-      // The backend only checks caller.isAnonymous() — no initialization needed.
-      // Calling any backend method here will silently break all buttons if it throws.
+      // Create and return actor directly — no backend calls here.
       return await createActorWithConfig(actorOptions);
     },
     staleTime: Number.POSITIVE_INFINITY,
