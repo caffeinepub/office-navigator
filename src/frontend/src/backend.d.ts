@@ -8,6 +8,11 @@ export interface None {
 }
 export type Option<T> = Some<T> | None;
 export type Time = bigint;
+export interface ChatEntry {
+    question: string;
+    answer: Array<string>;
+    timestamp: bigint;
+}
 export interface UserProfile {
     name: string;
     role?: string | null;
@@ -45,4 +50,6 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitScenario(text: string, who: MatrixWho | null, challengeType: MatrixType | null): Promise<Array<string>>;
+    submitFreeChat(question: string): Promise<Array<string>>;
+    getRecentChats(): Promise<Array<ChatEntry>>;
 }

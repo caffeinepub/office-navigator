@@ -92,6 +92,14 @@ export class ExternalBlob {
 export type Time = bigint;
 export interface UserProfile {
     name: string;
+    role?: string | null;
+    experienceLevel?: string | null;
+    industry?: string | null;
+}
+export interface ChatEntry {
+    question: string;
+    answer: Array<string>;
+    timestamp: Time;
 }
 export interface Scenario {
     who?: MatrixWho;
@@ -125,8 +133,10 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitScenario(text: string, who: MatrixWho | null, challengeType: MatrixType | null): Promise<Array<string>>;
+    submitFreeChat(question: string): Promise<Array<string>>;
+    getRecentChats(): Promise<Array<ChatEntry>>;
 }
-import type { MatrixType as _MatrixType, MatrixWho as _MatrixWho, Scenario as _Scenario, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { MatrixType as _MatrixType, MatrixWho as _MatrixWho, Scenario as _Scenario, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole, ChatEntry as _ChatEntry } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -230,14 +240,14 @@ export class Backend implements backendInterface {
     async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveCallerUserProfile(arg0);
+                const result = await this.actor.saveCallerUserProfile(to_candid_UserProfile(this._uploadFile, this._downloadFile, arg0));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveCallerUserProfile(arg0);
+            const result = await this.actor.saveCallerUserProfile(to_candid_UserProfile(this._uploadFile, this._downloadFile, arg0));
             return result;
         }
     }
@@ -253,6 +263,26 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.submitScenario(arg0, to_candid_opt_n15(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2));
             return result;
+        }
+    }
+    async submitFreeChat(arg0: string): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                return await this.actor.submitFreeChat(arg0);
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            return await this.actor.submitFreeChat(arg0);
+        }
+    }
+    async getRecentChats(): Promise<Array<ChatEntry>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getRecentChats();
+                return from_candid_vec_ChatEntry(this._uploadFile, this._downloadFile, result);
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await this.actor.getRecentChats();
+            return from_candid_vec_ChatEntry(this._uploadFile, this._downloadFile, result);
         }
     }
 }
@@ -272,7 +302,14 @@ function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
     return value.length === 0 ? null : from_candid_MatrixType_n13(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
-    return value.length === 0 ? null : value[0];
+    if (value.length === 0) return null;
+    const v = value[0];
+    return {
+        name: v.name,
+        role: v.role && v.role.length > 0 ? v.role[0] : null,
+        experienceLevel: v.experienceLevel && v.experienceLevel.length > 0 ? v.experienceLevel[0] : null,
+        industry: v.industry && v.industry.length > 0 ? v.industry[0] : null,
+    };
 }
 function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_MatrixWho]): MatrixWho | null {
     return value.length === 0 ? null : from_candid_MatrixWho_n10(_uploadFile, _downloadFile, value[0]);
@@ -387,6 +424,24 @@ function to_candid_variant_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint
     } : value == MatrixType.behaviorActionable ? {
         behaviorActionable: null
     } : value;
+}
+function to_candid_UserProfile(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserProfile): _UserProfile {
+    return {
+        name: value.name,
+        role: value.role ? [value.role] : [],
+        experienceLevel: value.experienceLevel ? [value.experienceLevel] : [],
+        industry: value.industry ? [value.industry] : [],
+    };
+}
+function from_candid_ChatEntry(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ChatEntry): ChatEntry {
+    return {
+        question: value.question,
+        answer: value.answer,
+        timestamp: value.timestamp,
+    };
+}
+function from_candid_vec_ChatEntry(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ChatEntry>): Array<ChatEntry> {
+    return value.map((x) => from_candid_ChatEntry(_uploadFile, _downloadFile, x));
 }
 export interface CreateActorOptions {
     agent?: Agent;

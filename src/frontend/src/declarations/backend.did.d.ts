@@ -24,7 +24,17 @@ export interface Scenario {
   'timestamp' : Time,
 }
 export type Time = bigint;
-export interface UserProfile { 'name' : string }
+export interface ChatEntry {
+  'question' : string,
+  'answer' : Array<string>,
+  'timestamp' : Time,
+}
+export interface UserProfile {
+  'name' : string,
+  'role' : [] | [string],
+  'experienceLevel' : [] | [string],
+  'industry' : [] | [string],
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
@@ -41,6 +51,8 @@ export interface _SERVICE {
     [string, [] | [MatrixWho], [] | [MatrixType]],
     Array<string>
   >,
+  'submitFreeChat' : ActorMethod<[string], Array<string>>,
+  'getRecentChats' : ActorMethod<[], Array<ChatEntry>>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -56,6 +56,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Scenario } from "./backend.d";
+import { GrowthPathSection } from "./components/GrowthPathSection";
 import { useAuthActions, useAuthState } from "./hooks/useAuthState";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import {
@@ -336,6 +337,66 @@ function parseSuggestions(items: string[]): {
     }
   }
   return { insights, microActions };
+}
+
+// ─── Feedback Widget ───────────────────────────────────────────────────────────
+
+function FeedbackWidget({ feedbackKey }: { feedbackKey: string }) {
+  const storageKey = `feedback_${feedbackKey}`;
+  const [rating, setRating] = useState<"helpful" | "not_helpful" | null>(
+    () => localStorage.getItem(storageKey) as "helpful" | "not_helpful" | null,
+  );
+
+  const handleRate = (value: "helpful" | "not_helpful") => {
+    localStorage.setItem(storageKey, value);
+    setRating(value);
+    toast.success(
+      value === "helpful"
+        ? "Great! Glad it helped."
+        : "Thanks for the feedback.",
+    );
+  };
+
+  if (rating) {
+    return (
+      <div
+        className="flex items-center gap-2 text-sm text-muted-foreground pt-1"
+        data-ocid="feedback.success_state"
+      >
+        <span>
+          {rating === "helpful" ? "👍" : "👎"}{" "}
+          {rating === "helpful" ? "Helpful" : "Not helpful"} — thanks for your
+          feedback!
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 pt-1" data-ocid="feedback.panel">
+      <span className="text-sm text-muted-foreground font-body">
+        Was this helpful?
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        data-ocid="feedback.button"
+        onClick={() => handleRate("helpful")}
+        className="h-8 px-3 text-xs font-body"
+      >
+        👍 Yes
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        data-ocid="feedback.secondary_button"
+        onClick={() => handleRate("not_helpful")}
+        className="h-8 px-3 text-xs font-body"
+      >
+        👎 No
+      </Button>
+    </div>
+  );
 }
 
 function MicroActionsBlock({ items }: { items: string[] }) {
@@ -733,6 +794,11 @@ function AskCoachPanel() {
                             </motion.div>
                           ))}
                           <MicroActionsBlock items={microActions} />
+                          <div className="mt-4 pt-3 border-t border-border/40">
+                            <FeedbackWidget
+                              feedbackKey={btoa(question.slice(0, 50))}
+                            />
+                          </div>
                         </>
                       );
                     })()}
@@ -1242,6 +1308,9 @@ function AuthenticatedApp() {
         </Tabs>
       </section>
 
+      {/* Growth Path Section */}
+      <GrowthPathSection submissions={history} chats={chatHistory} />
+
       {/* Matrix Results Dialog */}
       <AnimatePresence>
         {showResultsDialog && (
@@ -1288,6 +1357,11 @@ function AuthenticatedApp() {
                             </motion.div>
                           ))}
                           <MicroActionsBlock items={microActions} />
+                          <div className="mt-4 pt-3 border-t border-border/40">
+                            <FeedbackWidget
+                              feedbackKey={btoa(scenarioText.slice(0, 50))}
+                            />
+                          </div>
                         </>
                       );
                     })()}

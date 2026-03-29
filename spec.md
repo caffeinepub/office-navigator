@@ -1,31 +1,30 @@
 # Workplace Compass
 
 ## Current State
-The app has matrix navigation, deep coaching guidance, personalized responses (role/experience/industry), and free-text AI chat. Every coaching response returns an array of text insights displayed in a scrollable dialog.
+The app has 4 completed activities: free-text AI chat, role/experience/industry personalization, micro-actions ("Try this today"), and helpfulness feedback loop. The backend stores user scenarios (via `getRecentSubmissions`) and chat history (via `getRecentChats`). The frontend has tabs for Navigate, Ask Coach, and History. There is no growth/progress tracking tab.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Micro-actions section at the end of every coaching response (both matrix guidance and free chat)
-- Each response ends with 2-3 short, concrete "Try this today" actions
-- Micro-actions are visually distinct from insights (checklist/action card style with highlighted background)
-- Backend: getMicroActions helper returning 2-3 micro-actions tailored to the scenario
-- Return type extended to include microActions field
+- New "Growth Path" tab in the main navigation
+- Growth Path dashboard showing:
+  - Summary stats: total scenarios explored, total questions asked, categories covered (WHO + WHAT combinations)
+  - Milestone badges earned based on usage (e.g. "First Step", "Explorer", "Coach's Favourite", "Deep Thinker")
+  - Timeline/journey view: chronological list of all interactions (scenarios + chats) showing progression over time
+  - Category coverage map: visual grid showing which of the 9 matrix cells the user has explored
+  - Streak / consistency indicator (days with activity)
 
 ### Modify
-- submitScenario return type: change from [Text] to record { insights: [Text]; microActions: [Text] }
-- submitFreeChat return type: same change
-- Frontend: CoachPerspective dialog and chat response area updated to render micro-actions as a separate 'Try This Today' block below insights
-- History/saved scenarios store both insights and microActions
+- Tab list to include the new "Growth Path" tab (4th tab)
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Backend: Define GuidanceResult record type
-2. Backend: Add getMicroActions helper with category/keyword-aware micro-actions
-3. Backend: Update submitScenario and submitFreeChat to return GuidanceResult
-4. Backend: Update Scenario type to store microActions
-5. Frontend: Update all backend call sites to handle new return type
-6. Frontend: Add MicroActions UI component with green accent
-7. Frontend: Render micro-actions in coach dialog and chat response
+1. Compute growth stats in the frontend from existing `getRecentSubmissions` and `getRecentChats` data (no backend changes needed)
+2. Build `GrowthPathTab` component with:
+   - Stats cards (scenarios explored, questions asked, matrix cells covered)
+   - Badge/milestone system computed from stats
+   - 3x3 matrix coverage grid (9 cells, highlighted if explored)
+   - Timeline of recent activity (last 10 items, merged scenarios + chats)
+3. Add "Growth Path" to the Tabs component

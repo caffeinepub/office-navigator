@@ -13,7 +13,12 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const UserProfile = IDL.Record({
+  'name' : IDL.Text,
+  'role' : IDL.Opt(IDL.Text),
+  'experienceLevel' : IDL.Opt(IDL.Text),
+  'industry' : IDL.Opt(IDL.Text),
+});
 export const MatrixWho = IDL.Variant({
   'systemOrg' : IDL.Null,
   'peerTeam' : IDL.Null,
@@ -30,6 +35,11 @@ export const Scenario = IDL.Record({
   'suggestions' : IDL.Vec(IDL.Text),
   'text' : IDL.Text,
   'challengeType' : IDL.Opt(MatrixType),
+  'timestamp' : Time,
+});
+export const ChatEntry = IDL.Record({
+  'question' : IDL.Text,
+  'answer' : IDL.Vec(IDL.Text),
   'timestamp' : Time,
 });
 
@@ -51,6 +61,8 @@ export const idlService = IDL.Service({
       [IDL.Vec(IDL.Text)],
       [],
     ),
+  'submitFreeChat' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Text)], []),
+  'getRecentChats' : IDL.Func([], [IDL.Vec(ChatEntry)], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -61,7 +73,12 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const UserProfile = IDL.Record({
+    'name' : IDL.Text,
+    'role' : IDL.Opt(IDL.Text),
+    'experienceLevel' : IDL.Opt(IDL.Text),
+    'industry' : IDL.Opt(IDL.Text),
+  });
   const MatrixWho = IDL.Variant({
     'systemOrg' : IDL.Null,
     'peerTeam' : IDL.Null,
@@ -78,6 +95,11 @@ export const idlFactory = ({ IDL }) => {
     'suggestions' : IDL.Vec(IDL.Text),
     'text' : IDL.Text,
     'challengeType' : IDL.Opt(MatrixType),
+    'timestamp' : Time,
+  });
+  const ChatEntry = IDL.Record({
+    'question' : IDL.Text,
+    'answer' : IDL.Vec(IDL.Text),
     'timestamp' : Time,
   });
   
@@ -99,6 +121,8 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Text)],
         [],
       ),
+    'submitFreeChat' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Text)], []),
+    'getRecentChats' : IDL.Func([], [IDL.Vec(ChatEntry)], ['query']),
   });
 };
 

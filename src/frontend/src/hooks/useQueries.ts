@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type ChatEntry,
   MatrixType,
   MatrixWho,
   type Scenario,
@@ -9,12 +10,7 @@ import { useActor } from "./useActor";
 import { useAuthState } from "./useAuthState";
 
 export { MatrixWho, MatrixType };
-
-export interface ChatEntry {
-  question: string;
-  answer: string[];
-  timestamp: bigint;
-}
+export type { ChatEntry };
 
 export function useGetRecentSubmissions() {
   const { actor, isFetching } = useActor();
@@ -83,12 +79,7 @@ export function useSubmitFreeChat() {
   return useMutation<string[], Error, string>({
     mutationFn: async (question) => {
       if (!actor) throw new Error("Actor not ready");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const a = actor as any;
-      if (typeof a.submitFreeChat !== "function") {
-        throw new Error("submitFreeChat not available");
-      }
-      return a.submitFreeChat(question);
+      return actor.submitFreeChat(question);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recentChats"] });
@@ -103,10 +94,7 @@ export function useGetRecentChats() {
     queryKey: ["recentChats"],
     queryFn: async () => {
       if (!actor) return [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const a = actor as any;
-      if (typeof a.getRecentChats !== "function") return [];
-      return a.getRecentChats();
+      return actor.getRecentChats();
     },
     enabled: !!actor && !isFetching && isAuthenticated,
     refetchInterval: 30_000,
