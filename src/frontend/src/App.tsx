@@ -1,3 +1,14 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -34,22 +45,39 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowRight,
+  BookOpen,
+  Bookmark,
+  BookmarkCheck,
   Brain,
   Building2,
+  CheckCircle2,
   ChevronDown,
   Clock,
   Compass,
+  Copy,
+  FileText,
+  GraduationCap,
+  Heart,
   KeyRound,
   Lightbulb,
   Loader2,
   LogOut,
   MessageCircle,
   Pencil,
+  Play,
+  Printer,
   RefreshCw,
   Rocket,
   ShieldCheck,
+  Square,
+  Swords,
+  Trash2,
+  TrendingUp,
   User,
   Users,
+  Volume2,
+  X,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -58,7 +86,9 @@ import { toast } from "sonner";
 import type { Scenario } from "./backend.d";
 import { GrowthPathSection } from "./components/GrowthPathSection";
 import { useAuthActions, useAuthState } from "./hooks/useAuthState";
+import { useBookmarks } from "./hooks/useBookmarks";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
+import { useJournal } from "./hooks/useJournal";
 import {
   type ChatEntry,
   MatrixType,
@@ -425,6 +455,665 @@ function MicroActionsBlock({ items }: { items: string[] }) {
   );
 }
 
+// ─── Audio Playback Bar ────────────────────────────────────────────────────────
+
+const SAFETY_PREFIX =
+  "[SAFETY: Respond only with positive, forward-looking, strengths-based coaching. Never suggest harmful actions, negative thoughts, or anything that could damage mental health or career reputation.] ";
+
+const TONE_PREFIXES: Record<string, string> = {
+  Mentor: "[TONE: Mentor - warm, nurturing, growth-focused coach] ",
+  Strategist:
+    "[TONE: Strategist - analytical, structured, outcome-focused coach] ",
+  Motivator: "[TONE: Motivator - energetic, positive, champion-style coach] ",
+  "Straight-Talker":
+    "[TONE: Straight-Talker - direct, no-nonsense, honest coach] ",
+};
+
+function buildPrompt(text: string, tone: string): string {
+  return SAFETY_PREFIX + (TONE_PREFIXES[tone] ?? "") + text;
+}
+
+function useVoices() {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  useEffect(() => {
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () =>
+      window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+  return voices;
+}
+
+function pickVoice(
+  voices: SpeechSynthesisVoice[],
+  gender: "male" | "female",
+): SpeechSynthesisVoice | null {
+  if (voices.length === 0) return null;
+  const malePref = [
+    "Alex",
+    "Daniel",
+    "Google UK English Male",
+    "Google US English",
+  ];
+  const femalePref = [
+    "Samantha",
+    "Karen",
+    "Google UK English Female",
+    "Victoria",
+  ];
+  if (gender === "female") {
+    const byName = voices.find((v) =>
+      femalePref.some((p) => v.name.includes(p)),
+    );
+    if (byName) return byName;
+    const byLabel = voices.find((v) => v.name.toLowerCase().includes("female"));
+    if (byLabel) return byLabel;
+    return voices[1] ?? voices[0];
+  }
+  const byName = voices.find((v) => malePref.some((p) => v.name.includes(p)));
+  if (byName) return byName;
+  const byLabel = voices.find((v) => v.name.toLowerCase().includes("male"));
+  if (byLabel) return byLabel;
+  return voices[0];
+}
+
+function AudioPlaybackBar({
+  insights,
+  microActions,
+}: { insights: string[]; microActions: string[] }) {
+  const [voicePref, setVoicePref] = useState<"male" | "female">(() => {
+    const stored = localStorage.getItem("wc_voice_pref");
+    return stored === "female" ? "female" : "male";
+  });
+  const [isPlaying, setIsPlaying] = useState(false);
+  const voices = useVoices();
+
+  const fullText = [
+    ...insights,
+    ...(microActions.length > 0
+      ? ["Here are some actions to try today:", ...microActions]
+      : []),
+  ].join(". ");
+
+  const handlePlay = () => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      return;
+    }
+    if (!fullText.trim()) return;
+    const utter = new SpeechSynthesisUtterance(fullText);
+    const voice = pickVoice(voices, voicePref);
+    if (voice) utter.voice = voice;
+    utter.rate = 0.95;
+    utter.pitch = voicePref === "female" ? 1.1 : 0.9;
+    utter.onend = () => setIsPlaying(false);
+    utter.onerror = () => setIsPlaying(false);
+    setIsPlaying(true);
+    window.speechSynthesis.speak(utter);
+  };
+
+  const handleVoiceChange = (v: "male" | "female") => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+    }
+    setVoicePref(v);
+    localStorage.setItem("wc_voice_pref", v);
+  };
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  return (
+    <div
+      className="flex items-center gap-2 mt-3 p-2.5 rounded-xl bg-muted/60 border border-border/50"
+      data-ocid="audio.panel"
+    >
+      <Volume2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+      <span className="text-xs text-muted-foreground font-body font-medium">
+        Listen:
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          data-ocid="audio.toggle"
+          onClick={() => handleVoiceChange("male")}
+          className={`px-2.5 py-1 rounded-full text-xs font-body font-semibold transition-all ${voicePref === "male" ? "bg-primary text-primary-foreground" : "bg-background border border-border text-muted-foreground hover:text-foreground"}`}
+        >
+          ♂ Male
+        </button>
+        <button
+          type="button"
+          data-ocid="audio.toggle"
+          onClick={() => handleVoiceChange("female")}
+          className={`px-2.5 py-1 rounded-full text-xs font-body font-semibold transition-all ${voicePref === "female" ? "bg-primary text-primary-foreground" : "bg-background border border-border text-muted-foreground hover:text-foreground"}`}
+        >
+          ♀ Female
+        </button>
+      </div>
+      <button
+        type="button"
+        data-ocid="audio.button"
+        onClick={handlePlay}
+        className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-body font-semibold transition-all ${isPlaying ? "bg-destructive/10 text-destructive border border-destructive/20" : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"}`}
+      >
+        {isPlaying ? (
+          <>
+            <Square className="w-3 h-3" />
+            Stop
+          </>
+        ) : (
+          <>
+            <Play className="w-3 h-3" />
+            Play
+          </>
+        )}
+      </button>
+      {isPlaying && (
+        <span className="text-xs text-primary font-body animate-pulse">
+          Playing…
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Tone Selector Bar ─────────────────────────────────────────────────────────
+
+const COACHING_TONES = [
+  "Mentor",
+  "Strategist",
+  "Motivator",
+  "Straight-Talker",
+] as const;
+type CoachingTone = (typeof COACHING_TONES)[number];
+
+function ToneSelectorBar({
+  value,
+  onChange,
+}: { value: CoachingTone; onChange: (t: CoachingTone) => void }) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-muted/50 border border-border/50"
+      data-ocid="tone.panel"
+    >
+      <span className="text-xs font-semibold text-muted-foreground font-body uppercase tracking-wide flex-shrink-0">
+        Coaching tone:
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {COACHING_TONES.map((tone) => (
+          <button
+            key={tone}
+            type="button"
+            data-ocid="tone.toggle"
+            onClick={() => onChange(tone)}
+            className={`px-3 py-1 rounded-full text-xs font-body font-semibold transition-all ${
+              value === tone
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-background border border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+            }`}
+          >
+            {tone}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bookmark Button ───────────────────────────────────────────────────────────
+
+function BookmarkButton({
+  source,
+  insight,
+  bookmarks,
+  toggleBookmark,
+}: {
+  source: string;
+  insight: string;
+  bookmarks: import("./hooks/useBookmarks").Bookmark[];
+  toggleBookmark: (source: string, insight: string) => void;
+}) {
+  const bookmarked = bookmarks.some(
+    (b) => b.source === source && b.insight === insight,
+  );
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        toggleBookmark(source, insight);
+        toast.success(bookmarked ? "Bookmark removed." : "Insight saved!");
+      }}
+      className={`flex-shrink-0 p-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        bookmarked
+          ? "text-amber-500 hover:text-amber-600"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+      title={bookmarked ? "Remove bookmark" : "Bookmark this insight"}
+      data-ocid="bookmark.toggle"
+    >
+      {bookmarked ? (
+        <BookmarkCheck className="w-4 h-4" />
+      ) : (
+        <Bookmark className="w-4 h-4" />
+      )}
+    </button>
+  );
+}
+
+// ─── Export Card Modal ─────────────────────────────────────────────────────────
+
+function ExportCardModal({
+  open,
+  onOpenChange,
+  source,
+  insights,
+  microActions,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  source: string;
+  insights: string[];
+  microActions: string[];
+}) {
+  const handleCopyText = async () => {
+    const lines = [
+      "═══════════════════════════════════",
+      "  WORKPLACE COMPASS — COACHING CARD",
+      "═══════════════════════════════════",
+      "",
+      `📍 ${source}`,
+      "",
+      "INSIGHTS",
+      ...insights.map((s, i) => `${i + 1}. ${s}`),
+    ];
+    if (microActions.length > 0) {
+      lines.push(
+        "",
+        "✅ TRY THIS TODAY",
+        ...microActions.map((a, i) => `${i + 1}. ${a}`),
+      );
+    }
+    lines.push("", "— Workplace Compass (workplacecompass.ai)");
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast.success("Copied to clipboard!");
+    } catch {
+      toast.error("Could not copy. Please try manually.");
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg font-body" data-ocid="export.dialog">
+        <DialogHeader>
+          <DialogTitle className="font-display text-lg font-bold flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            Coaching Card
+          </DialogTitle>
+          <DialogDescription className="font-body text-sm">
+            Save or share your personalised coaching insights.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Preview card */}
+        <div
+          className="coaching-card-print rounded-2xl bg-foreground text-background p-6 space-y-4 mt-2"
+          id="coaching-card-preview"
+        >
+          <div className="flex items-center gap-2 border-b border-background/20 pb-3">
+            <Compass className="w-4 h-4 text-primary-foreground/70" />
+            <span className="font-display font-bold text-sm tracking-wide text-background/90">
+              WORKPLACE COMPASS
+            </span>
+          </div>
+          <p className="text-xs text-background/60 font-body line-clamp-2 italic">
+            {source}
+          </p>
+          <ul className="space-y-2">
+            {insights.map((insight) => (
+              <li key={insight} className="flex items-start gap-2">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                <span className="text-xs text-background/90 leading-relaxed font-body">
+                  {insight}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {microActions.length > 0 && (
+            <div className="border-t border-background/20 pt-3">
+              <p className="text-xs font-semibold text-background/70 mb-2 uppercase tracking-wide font-body">
+                ✅ Try This Today
+              </p>
+              <ul className="space-y-1.5">
+                {microActions.map((action, i) => (
+                  <li key={action} className="flex items-start gap-2">
+                    <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">
+                      {i + 1}
+                    </span>
+                    <span className="text-xs text-background/80 leading-relaxed font-body">
+                      {action}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            data-ocid="export.cancel_button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="font-body"
+          >
+            Close
+          </Button>
+          <Button
+            data-ocid="export.secondary_button"
+            variant="outline"
+            onClick={handleCopyText}
+            className="font-body gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            Copy as Text
+          </Button>
+          <Button
+            data-ocid="export.primary_button"
+            onClick={handlePrint}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-2"
+          >
+            <Printer className="w-4 h-4" />
+            Print / Save PDF
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Saved (Bookmarks) Tab ─────────────────────────────────────────────────────
+
+function SavedTab() {
+  const { bookmarks, removeBookmark } = useBookmarks();
+
+  if (bookmarks.length === 0) {
+    return (
+      <div
+        data-ocid="saved.empty_state"
+        className="text-center py-16 border border-dashed border-border rounded-2xl"
+      >
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+          <Bookmark className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <p className="font-body text-sm text-muted-foreground">
+          No saved insights yet.
+        </p>
+        <p className="font-body text-xs text-muted-foreground/70 mt-1">
+          Bookmark insights from your coaching sessions.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-ocid="saved.list">
+      {bookmarks.map((b, i) => (
+        <motion.div
+          key={b.id}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.04, duration: 0.25 }}
+          data-ocid={`saved.item.${i + 1}`}
+          className="bg-card rounded-xl border border-border p-4 flex items-start gap-3"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="border-l-2 border-amber-400 pl-3 py-1 bg-amber-50/50 rounded-r-lg">
+              <p className="text-sm text-foreground leading-relaxed">
+                {b.insight}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground font-body mt-2 truncate">
+              {b.source} ·{" "}
+              {new Date(b.timestamp).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-ocid={`saved.delete_button.${i + 1}`}
+            onClick={() => {
+              removeBookmark(b.id);
+              toast.success("Bookmark removed.");
+            }}
+            className="flex-shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Remove bookmark"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Journal Tab ───────────────────────────────────────────────────────────────
+
+function JournalTab() {
+  const { entries, addEntry, deleteEntry } = useJournal();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleSave = () => {
+    if (!title.trim()) {
+      toast.error("Please enter a title for your entry.");
+      return;
+    }
+    if (!body.trim()) {
+      toast.error("Please write something before saving.");
+      return;
+    }
+    addEntry(title.trim(), body.trim());
+    setTitle("");
+    setBody("");
+    toast.success("Journal entry saved.");
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* New entry form */}
+      <div
+        className="bg-card rounded-xl border border-border p-5 space-y-4"
+        data-ocid="journal.panel"
+      >
+        <p className="text-sm font-semibold text-foreground font-body flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" />
+          New Journal Entry
+        </p>
+        <Input
+          data-ocid="journal.input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Entry title…"
+          className="font-body"
+        />
+        <Textarea
+          data-ocid="journal.textarea"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Reflect on a workplace situation, what you learned, or how you grew…"
+          className="min-h-[120px] text-sm font-body resize-none"
+        />
+        <div className="flex justify-end">
+          <Button
+            data-ocid="journal.submit_button"
+            onClick={handleSave}
+            disabled={!title.trim() || !body.trim()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
+          >
+            Save Entry
+          </Button>
+        </div>
+      </div>
+
+      {/* Entry list */}
+      {entries.length === 0 ? (
+        <div
+          data-ocid="journal.empty_state"
+          className="text-center py-16 border border-dashed border-border rounded-2xl"
+        >
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+            <FileText className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <p className="font-body text-sm text-muted-foreground">
+            Your private space to reflect.
+          </p>
+          <p className="font-body text-xs text-muted-foreground/70 mt-1 max-w-xs mx-auto">
+            Track workplace situations and your personal growth over time.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3" data-ocid="journal.list">
+          {entries.map((entry, i) => (
+            <JournalEntryCard
+              key={entry.id}
+              entry={entry}
+              index={i}
+              confirmDeleteId={confirmDeleteId}
+              setConfirmDeleteId={setConfirmDeleteId}
+              deleteEntry={deleteEntry}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JournalEntryCard({
+  entry,
+  index,
+  confirmDeleteId,
+  setConfirmDeleteId,
+  deleteEntry,
+}: {
+  entry: { id: string; title: string; body: string; timestamp: number };
+  index: number;
+  confirmDeleteId: string | null;
+  setConfirmDeleteId: (id: string | null) => void;
+  deleteEntry: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isConfirming = confirmDeleteId === entry.id;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.25 }}
+      data-ocid={`journal.item.${index + 1}`}
+    >
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <div className="bg-card rounded-xl border border-border hover:shadow-sm transition-shadow">
+          <div className="p-4 flex items-start gap-3">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+              >
+                <p className="font-semibold text-sm text-foreground font-body">
+                  {entry.title}
+                </p>
+                <p className="text-xs text-muted-foreground font-body mt-0.5">
+                  {new Date(entry.timestamp).toLocaleDateString("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+                {!open && (
+                  <p className="text-xs text-muted-foreground font-body mt-1.5 line-clamp-2">
+                    {entry.body.slice(0, 100)}
+                    {entry.body.length > 100 ? "…" : ""}
+                  </p>
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {isConfirming ? (
+                <>
+                  <button
+                    type="button"
+                    data-ocid={`journal.confirm_button.${index + 1}`}
+                    onClick={() => {
+                      deleteEntry(entry.id);
+                      setConfirmDeleteId(null);
+                      toast.success("Entry deleted.");
+                    }}
+                    className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 font-body"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid={`journal.cancel_button.${index + 1}`}
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted/80 font-body"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  data-ocid={`journal.delete_button.${index + 1}`}
+                  onClick={() => setConfirmDeleteId(entry.id)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete entry"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none"
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+                  />
+                </button>
+              </CollapsibleTrigger>
+            </div>
+          </div>
+          <CollapsibleContent>
+            <div className="px-4 pb-4 border-t border-border/60 pt-3">
+              <p className="text-sm text-foreground leading-relaxed font-body whitespace-pre-wrap">
+                {entry.body}
+              </p>
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </motion.div>
+  );
+}
+
 // ─── History Item ──────────────────────────────────────────────────────────────
 
 function HistoryItem({
@@ -533,6 +1222,325 @@ function HistoryItem({
   );
 }
 
+// ─── Reframe Tab ───────────────────────────────────────────────────────────────
+
+function ReframeTab({ coachingTone }: { coachingTone: CoachingTone }) {
+  const [situation, setSituation] = useState("");
+  const [result, setResult] = useState<string[] | null>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const submitChat = useSubmitFreeChat();
+  const { bookmarks, toggleBookmark } = useBookmarks();
+
+  const handleSubmit = async () => {
+    if (!situation.trim()) {
+      toast.error("Please describe your situation first.");
+      return;
+    }
+    const prefix =
+      "[REFRAME ENGINE: The user wants to reframe a negative workplace situation as a growth opportunity. Reframe positively, find the hidden lesson, the strength it reveals, and 2-3 concrete next steps.] Situation: ";
+    try {
+      const res = await submitChat.mutateAsync(
+        buildPrompt(prefix + situation.trim(), coachingTone),
+      );
+      setResult(res);
+      setShowDialog(true);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    }
+  };
+
+  const resultParsed = result
+    ? parseSuggestions(result)
+    : { insights: [], microActions: [] };
+
+  return (
+    <>
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <label
+            htmlFor="reframe-input"
+            className="text-sm font-semibold text-foreground font-body"
+          >
+            Describe the situation you want to reframe
+          </label>
+          <Textarea
+            id="reframe-input"
+            data-ocid="reframe.textarea"
+            value={situation}
+            onChange={(e) => setSituation(e.target.value)}
+            placeholder="e.g. I was passed over for promotion despite delivering excellent results this year..."
+            className="min-h-[140px] text-sm font-body resize-none"
+          />
+        </div>
+        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <div className="flex justify-end">
+          <Button
+            data-ocid="reframe.submit_button"
+            onClick={handleSubmit}
+            disabled={submitChat.isPending || !situation.trim()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold h-11 rounded-xl gap-2 px-6"
+          >
+            {submitChat.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Reframing…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Reframe This
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showDialog && result && (
+          <Dialog open={showDialog} onOpenChange={setShowDialog}>
+            <DialogContent
+              className="max-w-2xl font-body flex flex-col max-h-[85vh]"
+              data-ocid="reframe.dialog"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <DialogHeader>
+                  <DialogTitle className="font-display text-xl font-bold text-foreground flex items-center gap-2">
+                    <RefreshCw className="w-5 h-5 text-primary" />
+                    Your Reframe
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground font-body pt-1 line-clamp-2">
+                    {situation}
+                  </p>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  {resultParsed.insights.map((insight, i) => (
+                    <motion.div
+                      key={insight}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      data-ocid={`reframe.item.${i + 1}`}
+                      className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg flex items-start gap-2"
+                    >
+                      <p className="text-sm text-foreground leading-relaxed flex-1">
+                        {insight}
+                      </p>
+                      <BookmarkButton
+                        source={`Reframe: ${situation.slice(0, 60)}`}
+                        insight={insight}
+                        bookmarks={bookmarks}
+                        toggleBookmark={toggleBookmark}
+                      />
+                    </motion.div>
+                  ))}
+                  <MicroActionsBlock items={resultParsed.microActions} />
+                  <AudioPlaybackBar
+                    insights={resultParsed.insights}
+                    microActions={resultParsed.microActions}
+                  />
+                  <div className="mt-4 pt-3 border-t border-border/40">
+                    <FeedbackWidget
+                      feedbackKey={btoa(situation.slice(0, 50))}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button
+                  data-ocid="reframe.close_button"
+                  variant="outline"
+                  onClick={() => setShowDialog(false)}
+                  className="font-body"
+                >
+                  Done
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+// ─── Script Builder Tab ────────────────────────────────────────────────────────
+
+const SCRIPT_SCENARIOS = [
+  "Giving difficult feedback",
+  "Resolving a conflict",
+  "Salary negotiation",
+  "Asking for a promotion",
+  "Declining extra work",
+  "Addressing underperformance",
+  "Requesting flexible work",
+];
+
+function ScriptBuilderTab({ coachingTone }: { coachingTone: CoachingTone }) {
+  const [scenarioType, setScenarioType] = useState("");
+  const [context, setContext] = useState("");
+  const [result, setResult] = useState<string[] | null>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const submitChat = useSubmitFreeChat();
+  const { bookmarks, toggleBookmark } = useBookmarks();
+
+  const handleSubmit = async () => {
+    if (!scenarioType) {
+      toast.error("Please select a scenario type first.");
+      return;
+    }
+    const prompt = `[SCRIPT BUILDER: Generate a practical, professional, word-for-word communication script and email template. Include: Opening line, Key points to cover, Exact phrases to use, How to close the conversation positively.] Scenario type: ${scenarioType}. Context: ${context.trim() || "No additional context provided."}`;
+    try {
+      const res = await submitChat.mutateAsync(
+        buildPrompt(prompt, coachingTone),
+      );
+      setResult(res);
+      setShowDialog(true);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    }
+  };
+
+  const resultParsed = result
+    ? parseSuggestions(result)
+    : { insights: [], microActions: [] };
+
+  return (
+    <>
+      <div className="space-y-5">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="scripts-scenario"
+            className="text-sm font-semibold text-foreground font-body"
+          >
+            Scenario type
+          </label>
+          <Select value={scenarioType} onValueChange={setScenarioType}>
+            <SelectTrigger
+              id="scripts-scenario"
+              data-ocid="scripts.select"
+              className="font-body"
+            >
+              <SelectValue placeholder="Select a scenario…" />
+            </SelectTrigger>
+            <SelectContent>
+              {SCRIPT_SCENARIOS.map((s) => (
+                <SelectItem key={s} value={s} className="font-body">
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="script-context"
+            className="text-sm font-semibold text-foreground font-body"
+          >
+            Add context{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </label>
+          <Textarea
+            id="script-context"
+            data-ocid="scripts.textarea"
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="Any specific details about your situation, relationship dynamics, or what outcome you want..."
+            className="min-h-[100px] text-sm font-body resize-none"
+          />
+        </div>
+        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <div className="flex justify-end">
+          <Button
+            data-ocid="scripts.submit_button"
+            onClick={handleSubmit}
+            disabled={submitChat.isPending || !scenarioType}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold h-11 rounded-xl gap-2 px-6"
+          >
+            {submitChat.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                Generate Script
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showDialog && result && (
+          <Dialog open={showDialog} onOpenChange={setShowDialog}>
+            <DialogContent
+              className="max-w-2xl font-body flex flex-col max-h-[85vh]"
+              data-ocid="scripts.dialog"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <DialogHeader>
+                  <DialogTitle className="font-display text-xl font-bold text-foreground flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Your Communication Script
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground font-body pt-1">
+                    {scenarioType}
+                  </p>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  {resultParsed.insights.map((insight, i) => (
+                    <motion.div
+                      key={insight}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      data-ocid={`scripts.item.${i + 1}`}
+                      className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg flex items-start gap-2"
+                    >
+                      <p className="text-sm text-foreground leading-relaxed flex-1">
+                        {insight}
+                      </p>
+                      <BookmarkButton
+                        source={`Script: ${scenarioType}`}
+                        insight={insight}
+                        bookmarks={bookmarks}
+                        toggleBookmark={toggleBookmark}
+                      />
+                    </motion.div>
+                  ))}
+                  <MicroActionsBlock items={resultParsed.microActions} />
+                  <AudioPlaybackBar
+                    insights={resultParsed.insights}
+                    microActions={resultParsed.microActions}
+                  />
+                  <div className="mt-4 pt-3 border-t border-border/40">
+                    <FeedbackWidget
+                      feedbackKey={btoa(scenarioType.slice(0, 50))}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button
+                  data-ocid="scripts.close_button"
+                  variant="outline"
+                  onClick={() => setShowDialog(false)}
+                  className="font-body"
+                >
+                  Done
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 // ─── Chat History Item ─────────────────────────────────────────────────────────
 
 function ChatHistoryItem({
@@ -625,16 +1633,498 @@ const STARTER_PROMPTS = [
 ];
 
 const MAX_CHAT_LENGTH = 600;
+const SUGGESTIONS = [
+  "My manager micromanages everything I do",
+  "I was passed over for a promotion without explanation",
+  "A colleague takes credit for my work",
+  "I feel burnt out and don't know how to raise it",
+  "My team ignores my ideas in meetings",
+  "I have a difficult conversation coming up with my manager",
+  "I'm being excluded from important decisions",
+  "My performance review felt unfair",
+  "I have a toxic colleague who undermines me",
+  "I don't feel valued or recognised",
+  "I want to ask for a pay rise but don't know how",
+  "My manager gives me vague feedback",
+  "I feel stuck and don't see a growth path",
+  "There's a conflict between me and a peer",
+  "I feel like I'm being set up to fail",
+];
 
-function AskCoachPanel() {
+type EmotionalTone = "frustrated" | "anxious" | "angry" | "neutral";
+
+function detectEmotionalTone(text: string): EmotionalTone {
+  const lower = text.toLowerCase();
+  const frustrated = [
+    "frustrated",
+    "fed up",
+    "exhausted",
+    "burnt out",
+    "tired of",
+    "sick of",
+    "had enough",
+    "struggling",
+    "overwhelmed",
+  ];
+  const anxious = [
+    "scared",
+    "worried",
+    "nervous",
+    "anxious",
+    "afraid",
+    "dread",
+    "panic",
+    "fear",
+    "unsure",
+    "don't know what to do",
+  ];
+  const angry = [
+    "angry",
+    "furious",
+    "unfair",
+    "not fair",
+    "ridiculous",
+    "outrageous",
+    "betrayed",
+    "lied",
+    "disrespected",
+  ];
+  if (angry.some((w) => lower.includes(w))) return "angry";
+  if (frustrated.some((w) => lower.includes(w))) return "frustrated";
+  if (anxious.some((w) => lower.includes(w))) return "anxious";
+  return "neutral";
+}
+
+const TONE_MESSAGES: Record<Exclude<EmotionalTone, "neutral">, string> = {
+  frustrated:
+    "I can hear this has been draining. Let's work through it together.",
+  anxious: "It's okay to feel uncertain about this. Here's how to approach it.",
+  angry:
+    "This sounds genuinely difficult. Let's find a path that protects you.",
+};
+
+function EmotionalToneBanner({
+  tone,
+  onDismiss,
+}: { tone: Exclude<EmotionalTone, "neutral">; onDismiss: () => void }) {
+  return (
+    <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 rounded-xl px-4 py-3 text-sm flex items-center gap-2 mb-4">
+      <Heart className="w-4 h-4 flex-shrink-0" />
+      <span className="flex-1 font-body">{TONE_MESSAGES[tone]}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="ml-2 flex-shrink-0 hover:opacity-70 transition-opacity"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Practice Scenarios ────────────────────────────────────────────────────────
+
+interface PracticeScenario {
+  id: string;
+  title: string;
+  context: string;
+  question: string;
+  options: string[];
+}
+
+const PRACTICE_SCENARIOS: PracticeScenario[] = [
+  {
+    id: "vague-feedback",
+    title: "Vague Performance Feedback",
+    context:
+      "Your manager just told you 'You need to be more proactive' in your performance review. No examples given. You feel confused and a bit stung.",
+    question: "What do you do next?",
+    options: [
+      "Ask for specific examples right now in the meeting",
+      "Accept it and try to figure out what they mean",
+      "Discuss with a trusted colleague later",
+      "Request a follow-up meeting to clarify expectations",
+    ],
+  },
+  {
+    id: "credit-stolen",
+    title: "Peer Takes Credit for Your Work",
+    context:
+      "In a team presentation, your colleague presents your analysis as if it were their own. Your manager praises them. You're sitting right there.",
+    question: "How do you respond?",
+    options: [
+      "Say nothing — address it privately with the colleague later",
+      "Gently clarify your contribution in the room now",
+      "Speak to your manager privately afterward",
+      "Let it go — it's not worth the conflict",
+    ],
+  },
+  {
+    id: "missed-promotion",
+    title: "Passed Over for Promotion",
+    context:
+      "Someone with less experience was promoted over you. You weren't given a reason. You're questioning whether to stay.",
+    question: "What's your first move?",
+    options: [
+      "Request a meeting with your manager to understand the decision",
+      "Start updating your CV immediately",
+      "Talk to HR about the process",
+      "Ask the promoted colleague how they positioned themselves",
+    ],
+  },
+  {
+    id: "micromanagement",
+    title: "Constant Micromanagement",
+    context:
+      "Your manager checks in multiple times a day, questions every decision, and CC's themselves on all your emails. You feel you can't breathe.",
+    question: "How do you approach this?",
+    options: [
+      "Have a direct conversation about your working style",
+      "Document your work more proactively to build their trust",
+      "Speak to HR or a skip-level manager",
+      "Quietly start looking for a new role",
+    ],
+  },
+  {
+    id: "excluded-decisions",
+    title: "Excluded from Key Decisions",
+    context:
+      "You keep finding out about decisions that affect your work after they're already made. You're never in the room.",
+    question: "What do you do?",
+    options: [
+      "Ask your manager directly why you're not included",
+      "Find allies who can advocate for your inclusion",
+      "Start attending meetings you weren't explicitly invited to",
+      "Document the pattern and raise it formally",
+    ],
+  },
+  {
+    id: "toxic-colleague",
+    title: "Undermining Colleague",
+    context:
+      "A peer regularly interrupts you in meetings, dismisses your ideas, and makes subtle negative comments about your work to others.",
+    question: "How do you handle this?",
+    options: [
+      "Address it directly and privately with the colleague",
+      "Speak to your manager about the pattern",
+      "Start documenting specific incidents",
+      "Change how you engage — become more assertive in the room",
+    ],
+  },
+];
+
+const PRACTICE_STORAGE_KEY = "wc_practice_completions";
+
+function getPracticeCompletions(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(PRACTICE_STORAGE_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function savePracticeCompletion(id: string) {
+  const existing = getPracticeCompletions();
+  if (!existing.includes(id)) {
+    localStorage.setItem(
+      PRACTICE_STORAGE_KEY,
+      JSON.stringify([...existing, id]),
+    );
+  }
+}
+
+function PracticeTab({ coachingTone }: { coachingTone: CoachingTone }) {
+  const [completions, setCompletions] = useState<string[]>(
+    getPracticeCompletions,
+  );
+  const [activeScenario, setActiveScenario] = useState<PracticeScenario | null>(
+    null,
+  );
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [freeText, setFreeText] = useState("");
+  const [coachingResult, setCoachingResult] = useState<string[] | null>(null);
+  const [showResultDialog, setShowResultDialog] = useState(false);
+  const submitChat = useSubmitFreeChat();
+  const { bookmarks, toggleBookmark } = useBookmarks();
+
+  const handleGetCoaching = async () => {
+    if (!activeScenario || !selectedOption) return;
+    const rawPrompt = `The user is practicing a workplace scenario. Scenario: ${activeScenario.context}. Question: ${activeScenario.question}. They chose: "${selectedOption}".${freeText.trim() ? ` Additional thoughts: ${freeText.trim()}.` : ""} Give structured coaching on whether this is a strong approach, what risks it carries, and what alternative approaches they might consider. End with a 'Try This Today' action.`;
+    try {
+      const result = await submitChat.mutateAsync(
+        buildPrompt(rawPrompt, coachingTone),
+      );
+      setCoachingResult(result);
+      setShowResultDialog(true);
+      savePracticeCompletion(activeScenario.id);
+      setCompletions(getPracticeCompletions());
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    }
+  };
+
+  const handleReset = () => {
+    setActiveScenario(null);
+    setSelectedOption(null);
+    setFreeText("");
+    setCoachingResult(null);
+  };
+
+  if (!activeScenario) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="font-display text-lg font-bold text-foreground mb-1">
+            Practice Scenarios
+          </p>
+          <p className="text-sm text-muted-foreground font-body mb-5">
+            Rehearse your response before it happens. Choose a realistic
+            workplace situation to practise.
+          </p>
+        </div>
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+          data-ocid="practice.list"
+        >
+          {PRACTICE_SCENARIOS.map((scenario, i) => {
+            const done = completions.includes(scenario.id);
+            return (
+              <motion.div
+                key={scenario.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06 }}
+                data-ocid={`practice.item.${i + 1}`}
+                className={`bg-card rounded-xl border p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow ${done ? "border-primary/40" : "border-border"}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-display font-bold text-sm text-foreground">
+                    {scenario.title}
+                  </p>
+                  {done && (
+                    <span className="flex-shrink-0">
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground font-body leading-relaxed line-clamp-2">
+                  {scenario.context.slice(0, 90)}
+                  {scenario.context.length > 90 ? "…" : ""}
+                </p>
+                <Button
+                  data-ocid="practice.primary_button"
+                  size="sm"
+                  onClick={() => {
+                    setActiveScenario(scenario);
+                    setSelectedOption(null);
+                    setFreeText("");
+                    setCoachingResult(null);
+                  }}
+                  className="mt-auto font-body gap-1.5 rounded-lg"
+                  variant={done ? "outline" : "default"}
+                >
+                  <Swords className="w-3.5 h-3.5" />
+                  {done ? "Practise Again" : "Start Scenario"}
+                </Button>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-5">
+        <button
+          type="button"
+          onClick={handleReset}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-body"
+          data-ocid="practice.secondary_button"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Back to scenarios
+        </button>
+
+        <div className="bg-secondary/40 border-l-4 border-primary rounded-r-xl p-4">
+          <p className="font-display font-bold text-sm text-foreground mb-2">
+            {activeScenario.title}
+          </p>
+          <p className="text-sm text-foreground/80 font-body leading-relaxed">
+            {activeScenario.context}
+          </p>
+        </div>
+
+        <div>
+          <p className="font-body font-semibold text-sm text-foreground mb-3">
+            {activeScenario.question}
+          </p>
+          <div className="space-y-2" data-ocid="practice.panel">
+            {activeScenario.options.map((opt, i) => (
+              <button
+                key={opt}
+                type="button"
+                data-ocid="practice.toggle"
+                onClick={() => setSelectedOption(opt)}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm font-body transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selectedOption === opt ? "border-primary bg-primary/8 text-foreground font-medium" : "border-border bg-background hover:border-primary/40 text-muted-foreground hover:text-foreground"}`}
+              >
+                <span className="font-semibold mr-2 text-primary">
+                  {String.fromCharCode(65 + i)}.
+                </span>
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="practice-freetext"
+            className="text-sm font-semibold text-foreground font-body"
+          >
+            Add your own thoughts{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </label>
+          <Textarea
+            id="practice-freetext"
+            data-ocid="practice.textarea"
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            placeholder="Any context, concerns, or additional thoughts about this situation..."
+            className="min-h-[80px] text-sm font-body resize-none"
+          />
+        </div>
+
+        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
+        <Button
+          data-ocid="practice.submit_button"
+          onClick={handleGetCoaching}
+          disabled={!selectedOption || submitChat.isPending}
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold h-11 rounded-xl gap-2"
+        >
+          {submitChat.isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Getting coaching…
+            </>
+          ) : (
+            <>
+              <GraduationCap className="w-4 h-4" />
+              Get Coaching
+            </>
+          )}
+        </Button>
+      </div>
+
+      <AnimatePresence>
+        {showResultDialog && coachingResult && (
+          <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
+            <DialogContent
+              className="max-w-2xl font-body flex flex-col max-h-[85vh]"
+              data-ocid="practice.dialog"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <DialogHeader>
+                  <DialogTitle className="font-display text-xl font-bold text-foreground flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5 text-primary" />
+                    Coaching on Your Choice
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground font-body pt-1">
+                    {activeScenario.title} — You chose: "{selectedOption}"
+                  </p>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  {(() => {
+                    const { insights, microActions } =
+                      parseSuggestions(coachingResult);
+                    return (
+                      <>
+                        {insights.map((insight, i) => (
+                          <motion.div
+                            key={insight}
+                            initial={{ opacity: 0, x: -12 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.08, duration: 0.35 }}
+                            data-ocid={`practice.item.${i + 1}`}
+                            className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg flex items-start gap-2"
+                          >
+                            <p className="text-sm text-foreground leading-relaxed flex-1">
+                              {insight}
+                            </p>
+                            <BookmarkButton
+                              source={`Practice: ${activeScenario.title}`}
+                              insight={insight}
+                              bookmarks={bookmarks}
+                              toggleBookmark={toggleBookmark}
+                            />
+                          </motion.div>
+                        ))}
+                        <MicroActionsBlock items={microActions} />
+                        <AudioPlaybackBar
+                          insights={insights}
+                          microActions={microActions}
+                        />
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                <Button
+                  data-ocid="practice.secondary_button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowResultDialog(false);
+                    handleReset();
+                  }}
+                  className="font-body gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Another
+                </Button>
+                <Button
+                  data-ocid="practice.close_button"
+                  variant="outline"
+                  onClick={() => setShowResultDialog(false)}
+                  className="font-body"
+                >
+                  Done
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
   const [question, setQuestion] = useState("");
   const [chatInsights, setChatInsights] = useState<string[] | null>(null);
   const [showChatDialog, setShowChatDialog] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [emotionalTone, setEmotionalTone] = useState<EmotionalTone>("neutral");
+  const [toneBannerDismissed, setToneBannerDismissed] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isAuthenticated } = useAuthState();
   const submitChat = useSubmitFreeChat();
+  const { bookmarks, toggleBookmark } = useBookmarks();
 
   const charCount = question.length;
   const isOverLimit = charCount > MAX_CHAT_LENGTH;
+
+  const filteredSuggestions =
+    question.length >= 3
+      ? SUGGESTIONS.filter((s) =>
+          s.toLowerCase().includes(question.toLowerCase()),
+        ).slice(0, 5)
+      : [];
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
@@ -652,8 +2142,16 @@ function AskCoachPanel() {
       );
       return;
     }
+    const tone = detectEmotionalTone(trimmed);
+    setEmotionalTone(tone);
+    setToneBannerDismissed(false);
+    const emotionPrefix =
+      tone !== "neutral"
+        ? `The user appears to be feeling ${tone}. Begin your response with a single empathetic sentence acknowledging their emotional state before moving into practical coaching. Question: ${trimmed}`
+        : trimmed;
+    const promptWithTone = buildPrompt(emotionPrefix, coachingTone);
     try {
-      const result = await submitChat.mutateAsync(trimmed);
+      const result = await submitChat.mutateAsync(promptWithTone);
       setChatInsights(result);
       setShowChatDialog(true);
     } catch {
@@ -701,18 +2199,47 @@ function AskCoachPanel() {
               {charCount} / {MAX_CHAT_LENGTH}
             </span>
           </div>
-          <Textarea
-            data-ocid="chat.textarea"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder='e.g. "How do I handle a colleague who keeps taking credit for my ideas?"'
-            className="min-h-[140px] text-sm font-body resize-none bg-background/60 border-border/80 focus:border-primary focus-visible:ring-primary/30 placeholder:text-muted-foreground/60 leading-relaxed"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                handleSubmit();
-              }
-            }}
-          />
+          <div className="relative">
+            <Textarea
+              ref={textareaRef}
+              data-ocid="chat.textarea"
+              value={question}
+              onChange={(e) => {
+                setQuestion(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setShowSuggestions(false);
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
+                  handleSubmit();
+              }}
+              placeholder='e.g. "How do I handle a colleague who keeps taking credit for my ideas?"'
+              className="min-h-[140px] text-sm font-body resize-none bg-background/60 border-border/80 focus:border-primary focus-visible:ring-primary/30 placeholder:text-muted-foreground/60 leading-relaxed"
+            />
+            {showSuggestions && filteredSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-xl shadow-lg overflow-hidden">
+                <p className="text-xs font-semibold text-muted-foreground font-body px-3 pt-2 pb-1 uppercase tracking-wide">
+                  Suggestions
+                </p>
+                {filteredSuggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setQuestion(s);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm font-body hover:bg-secondary transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {isOverLimit && (
             <p
               className="text-xs text-destructive font-body"
@@ -723,6 +2250,9 @@ function AskCoachPanel() {
             </p>
           )}
         </div>
+
+        {/* Tone selector */}
+        <ToneSelectorBar value={coachingTone} onChange={() => {}} />
 
         {/* Submit */}
         <div className="flex items-center justify-between">
@@ -772,6 +2302,12 @@ function AskCoachPanel() {
                   </p>
                 </DialogHeader>
 
+                {emotionalTone !== "neutral" && !toneBannerDismissed && (
+                  <EmotionalToneBanner
+                    tone={emotionalTone as Exclude<EmotionalTone, "neutral">}
+                    onDismiss={() => setToneBannerDismissed(true)}
+                  />
+                )}
                 {chatInsights && chatInsights.length > 0 ? (
                   <div className="space-y-4 py-2" data-ocid="chat.panel">
                     {(() => {
@@ -786,14 +2322,24 @@ function AskCoachPanel() {
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: i * 0.08, duration: 0.35 }}
                               data-ocid={`chat.item.${i + 1}`}
-                              className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg"
+                              className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg flex items-start gap-2"
                             >
-                              <p className="text-sm text-foreground leading-relaxed">
+                              <p className="text-sm text-foreground leading-relaxed flex-1">
                                 {insight}
                               </p>
+                              <BookmarkButton
+                                source={question}
+                                insight={insight}
+                                bookmarks={bookmarks}
+                                toggleBookmark={toggleBookmark}
+                              />
                             </motion.div>
                           ))}
                           <MicroActionsBlock items={microActions} />
+                          <AudioPlaybackBar
+                            insights={insights}
+                            microActions={microActions}
+                          />
                           <div className="mt-4 pt-3 border-t border-border/40">
                             <FeedbackWidget
                               feedbackKey={btoa(question.slice(0, 50))}
@@ -814,7 +2360,21 @@ function AskCoachPanel() {
                   </div>
                 )}
               </div>
-              <div className="flex justify-end pt-2">
+              <div className="flex items-center justify-between pt-2">
+                <Button
+                  data-ocid="chat.secondary_button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowChatDialog(false);
+                    setShowExportModal(true);
+                  }}
+                  className="font-body gap-2"
+                  disabled={!chatInsights || chatInsights.length === 0}
+                >
+                  <FileText className="w-4 h-4" />
+                  Export Card
+                </Button>
                 <Button
                   data-ocid="chat.close_button"
                   variant="outline"
@@ -828,21 +2388,49 @@ function AskCoachPanel() {
           </Dialog>
         )}
       </AnimatePresence>
+
+      {/* Export modal */}
+      {chatInsights &&
+        (() => {
+          const { insights, microActions } = parseSuggestions(chatInsights);
+          return (
+            <ExportCardModal
+              open={showExportModal}
+              onOpenChange={setShowExportModal}
+              source={question}
+              insights={insights}
+              microActions={microActions}
+            />
+          );
+        })()}
     </>
   );
 }
 
 // ─── Authenticated App ─────────────────────────────────────────────────────────
 
-type AppMode = "matrix" | "chat";
+type AppMode = "matrix" | "chat" | "practice" | "reframe" | "scripts";
 
 function AuthenticatedApp() {
   const [mode, setMode] = useState<AppMode>("matrix");
+  const [coachingTone, _setCoachingTone] = useState<CoachingTone>("Mentor");
   const [selectedWho, setSelectedWho] = useState<MatrixWho | null>(null);
   const [selectedType, setSelectedType] = useState<MatrixType | null>(null);
   const [scenarioText, setScenarioText] = useState("");
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [showResultsDialog, setShowResultsDialog] = useState(false);
+  const [showMatrixExportModal, setShowMatrixExportModal] = useState(false);
+  const { bookmarks, toggleBookmark } = useBookmarks();
+  const [practiceCount, setPracticeCount] = useState(
+    () => getPracticeCompletions().length,
+  );
+
+  // Sync practice completions from localStorage when mode changes
+  useEffect(() => {
+    if (mode === "practice" || mode === "matrix") {
+      setPracticeCount(getPracticeCompletions().length);
+    }
+  }, [mode]);
 
   const { isAuthenticated } = useAuthState();
   const { data: profile } = useGetCallerUserProfile();
@@ -873,7 +2461,7 @@ function AuthenticatedApp() {
     }
     try {
       const result = await submitMutation.mutateAsync({
-        text: scenarioText.trim(),
+        text: buildPrompt(scenarioText.trim(), coachingTone),
         who: selectedWho,
         challengeType: selectedType,
       });
@@ -922,6 +2510,45 @@ function AuthenticatedApp() {
           >
             <MessageCircle className="w-4 h-4" />
             Ask Coach
+          </button>
+          <button
+            type="button"
+            data-ocid="mode.tab"
+            onClick={() => setMode("practice")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-body transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              mode === "practice"
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Swords className="w-4 h-4" />
+            Practice
+          </button>
+          <button
+            type="button"
+            data-ocid="mode.tab"
+            onClick={() => setMode("reframe")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-body transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              mode === "reframe"
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reframe It
+          </button>
+          <button
+            type="button"
+            data-ocid="mode.tab"
+            onClick={() => setMode("scripts")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-body transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              mode === "scripts"
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Script Builder
           </button>
         </div>
       </motion.div>
@@ -1142,6 +2769,12 @@ function AuthenticatedApp() {
                       />
                     </div>
 
+                    <ToneSelectorBar
+                      value={coachingTone}
+                      onChange={(t) => {
+                        _setCoachingTone(t);
+                      }}
+                    />
                     <div className="flex justify-end">
                       <Button
                         data-ocid="scenario.submit_button"
@@ -1167,7 +2800,7 @@ function AuthenticatedApp() {
               </AnimatePresence>
             </div>
           </motion.div>
-        ) : (
+        ) : mode === "chat" ? (
           <motion.div
             key="chat"
             initial={{ opacity: 0, y: 10 }}
@@ -1189,7 +2822,82 @@ function AuthenticatedApp() {
                   </p>
                 </div>
               </div>
-              <AskCoachPanel />
+              <AskCoachPanel coachingTone={coachingTone} />
+            </div>
+          </motion.div>
+        ) : mode === "practice" ? (
+          <motion.div
+            key="practice"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="bg-card rounded-2xl border border-border shadow-elevated p-6 sm:p-8 mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Swords className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    Practice Scenarios
+                  </h2>
+                  <p className="text-xs text-muted-foreground font-body">
+                    Rehearse your response before it happens in real life.
+                  </p>
+                </div>
+              </div>
+              <PracticeTab coachingTone={coachingTone} />
+            </div>
+          </motion.div>
+        ) : mode === "reframe" ? (
+          <motion.div
+            key="reframe"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="bg-card rounded-2xl border border-border shadow-elevated p-6 sm:p-8 mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <RefreshCw className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    Reframe It
+                  </h2>
+                  <p className="text-xs text-muted-foreground font-body">
+                    Turn any setback into a growth opportunity.
+                  </p>
+                </div>
+              </div>
+              <ReframeTab coachingTone={coachingTone} />
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="scripts"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="bg-card rounded-2xl border border-border shadow-elevated p-6 sm:p-8 mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    Script Builder
+                  </h2>
+                  <p className="text-xs text-muted-foreground font-body">
+                    Generate word-for-word scripts and email templates.
+                  </p>
+                </div>
+              </div>
+              <ScriptBuilderTab coachingTone={coachingTone} />
             </div>
           </motion.div>
         )}
@@ -1210,7 +2918,10 @@ function AuthenticatedApp() {
         </div>
 
         <Tabs defaultValue="scenarios">
-          <TabsList className="mb-5 h-10" data-ocid="history.tab">
+          <TabsList
+            className="mb-5 h-10 flex-wrap gap-1"
+            data-ocid="history.tab"
+          >
             <TabsTrigger
               value="scenarios"
               className="font-body text-sm"
@@ -1234,6 +2945,22 @@ function AuthenticatedApp() {
                   {chatHistory.length}
                 </span>
               )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="saved"
+              className="font-body text-sm"
+              data-ocid="history.tab"
+            >
+              <Bookmark className="w-3.5 h-3.5 mr-1" />
+              Saved
+            </TabsTrigger>
+            <TabsTrigger
+              value="journal"
+              className="font-body text-sm"
+              data-ocid="history.tab"
+            >
+              <FileText className="w-3.5 h-3.5 mr-1" />
+              Journal
             </TabsTrigger>
           </TabsList>
 
@@ -1305,11 +3032,23 @@ function AuthenticatedApp() {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="saved">
+            <SavedTab />
+          </TabsContent>
+
+          <TabsContent value="journal">
+            <JournalTab />
+          </TabsContent>
         </Tabs>
       </section>
 
       {/* Growth Path Section */}
-      <GrowthPathSection submissions={history} chats={chatHistory} />
+      <GrowthPathSection
+        submissions={history}
+        chats={chatHistory}
+        practiceCount={practiceCount}
+      />
 
       {/* Matrix Results Dialog */}
       <AnimatePresence>
@@ -1349,14 +3088,28 @@ function AuthenticatedApp() {
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: i * 0.08, duration: 0.35 }}
                               data-ocid={`results.item.${i + 1}`}
-                              className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg"
+                              className="border-l-2 border-primary pl-4 py-2 bg-secondary/40 rounded-r-lg flex items-start gap-2"
                             >
-                              <p className="text-sm text-foreground leading-relaxed">
+                              <p className="text-sm text-foreground leading-relaxed flex-1">
                                 {suggestion}
                               </p>
+                              <BookmarkButton
+                                source={
+                                  selectedCell
+                                    ? `${selectedCell.scenario}: ${scenarioText}`
+                                    : scenarioText
+                                }
+                                insight={suggestion}
+                                bookmarks={bookmarks}
+                                toggleBookmark={toggleBookmark}
+                              />
                             </motion.div>
                           ))}
                           <MicroActionsBlock items={microActions} />
+                          <AudioPlaybackBar
+                            insights={insights}
+                            microActions={microActions}
+                          />
                           <div className="mt-4 pt-3 border-t border-border/40">
                             <FeedbackWidget
                               feedbackKey={btoa(scenarioText.slice(0, 50))}
@@ -1378,7 +3131,21 @@ function AuthenticatedApp() {
                 )}
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="flex items-center justify-between pt-2">
+                <Button
+                  data-ocid="results.secondary_button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowResultsDialog(false);
+                    setShowMatrixExportModal(true);
+                  }}
+                  className="font-body gap-2"
+                  disabled={!suggestions || suggestions.length === 0}
+                >
+                  <FileText className="w-4 h-4" />
+                  Export Card
+                </Button>
                 <Button
                   data-ocid="results.close_button"
                   variant="outline"
@@ -1392,6 +3159,24 @@ function AuthenticatedApp() {
           </Dialog>
         )}
       </AnimatePresence>
+
+      {/* Matrix export modal */}
+      {suggestions &&
+        (() => {
+          const { insights, microActions } = parseSuggestions(suggestions);
+          const source = selectedCell
+            ? `${selectedCell.scenario}${scenarioText ? `: ${scenarioText}` : ""}`
+            : scenarioText;
+          return (
+            <ExportCardModal
+              open={showMatrixExportModal}
+              onOpenChange={setShowMatrixExportModal}
+              source={source}
+              insights={insights}
+              microActions={microActions}
+            />
+          );
+        })()}
     </>
   );
 }
@@ -1447,14 +3232,166 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
           </div>
         </div>
 
-        <div className="max-w-2xl w-full rounded-2xl overflow-hidden shadow-md border border-border">
-          <img
-            src="/assets/uploads/workplace-compass-1-1.png"
-            alt="Workplace Compass infographic"
-            className="w-full h-auto block"
-          />
+        {/* Value Stats Strip */}
+        <div className="w-full max-w-3xl rounded-2xl overflow-hidden mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4">
+            {[
+              {
+                num: "9",
+                label: "Coaching Paths",
+                sub: "Mapped across the WHO × WHAT matrix",
+              },
+              {
+                num: "5+",
+                label: "Core Features",
+                sub: "Matrix · Chat · Growth · Bookmarks · Practice",
+              },
+              {
+                num: "100%",
+                label: "Personalised",
+                sub: "Tailored to your role, industry & experience",
+              },
+              {
+                num: "🔒",
+                label: "Always Private",
+                sub: "Your history is only visible to you",
+              },
+            ].map(({ num, label, sub }, i) => (
+              <motion.div
+                key={label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }}
+                className="bg-foreground text-background p-5 flex flex-col gap-1 border-r border-background/10 last:border-r-0"
+              >
+                <p className="font-display text-3xl font-bold text-background">
+                  {num}
+                </p>
+                <p className="font-display text-sm font-semibold text-background/90">
+                  {label}
+                </p>
+                <p className="font-body text-xs text-background/55 leading-relaxed">
+                  {sub}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Before / After Comparison */}
+        <div className="w-full max-w-3xl mb-10">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border">
+              <div className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <XCircle className="w-4 h-4 text-destructive/70" />
+                  <p className="font-display font-bold text-sm text-destructive/80">
+                    Without a Coach
+                  </p>
+                </div>
+                <ul className="space-y-2.5">
+                  {[
+                    "Vent frustration online",
+                    "React emotionally in the moment",
+                    "Advice from friends who don't know your workplace",
+                    "Regret what you said or did",
+                  ].map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2.5 text-sm font-body text-muted-foreground"
+                    >
+                      <XCircle className="w-4 h-4 text-destructive/50 flex-shrink-0 mt-0.5" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="p-6 bg-green-50/50 dark:bg-green-950/20">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <p className="font-display font-bold text-sm text-green-700 dark:text-green-400">
+                    With Workplace Compass
+                  </p>
+                </div>
+                <ul className="space-y-2.5">
+                  {[
+                    "Navigate to a constructive response",
+                    "Understand the real dynamics at play",
+                    "Structured, personalised coaching",
+                    "Protect your reputation and relationships",
+                  ].map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2.5 text-sm font-body text-foreground"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
+
+      {/* Feature highlights strip */}
+      <div className="w-full max-w-3xl grid grid-cols-2 md:grid-cols-3 gap-4 mt-10 mb-8 px-4">
+        {[
+          {
+            icon: <Compass className="w-5 h-5 text-primary" />,
+            title: "Matrix Navigator",
+            desc: "Two-axis WHO × WHAT map to any situation",
+          },
+          {
+            icon: <MessageCircle className="w-5 h-5 text-primary" />,
+            title: "Ask Coach",
+            desc: "Free-text AI coaching on any workplace challenge",
+          },
+          {
+            icon: <TrendingUp className="w-5 h-5 text-primary" />,
+            title: "Growth Path",
+            desc: "Track milestones, badges, and coverage over time",
+          },
+          {
+            icon: <Bookmark className="w-5 h-5 text-primary" />,
+            title: "Saved Insights",
+            desc: "Bookmark key coaching insights for later review",
+          },
+          {
+            icon: <BookOpen className="w-5 h-5 text-primary" />,
+            title: "Practice Scenarios",
+            desc: "Realistic simulations to rehearse your response before it happens",
+          },
+          {
+            icon: <Heart className="w-5 h-5 text-primary" />,
+            title: "Tone-Aware Coaching",
+            desc: "Detects emotional signals and leads with empathy when needed",
+          },
+        ].map(({ icon, title, desc }) => (
+          <div
+            key={title}
+            className="bg-card rounded-xl border border-border p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow"
+          >
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              {icon}
+            </div>
+            <div>
+              <p className="font-display font-bold text-sm text-foreground">
+                {title}
+              </p>
+              <p className="text-xs text-muted-foreground font-body mt-0.5 leading-relaxed">
+                {desc}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="bg-card rounded-2xl border border-border shadow-elevated p-10 max-w-md w-full text-center mt-6 mb-20">
         <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
@@ -1505,6 +3442,10 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
         </Button>
         <p className="text-xs text-muted-foreground mt-3 font-body">
           No password needed — uses Internet Identity.
+        </p>
+        <p className="text-xs text-muted-foreground text-center mt-3 font-body">
+          For serious mental health concerns, please consult a licensed
+          professional.
         </p>
       </div>
     </motion.div>
@@ -1865,18 +3806,17 @@ function MainApp() {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium font-body mb-4 ring-1 ring-primary/20">
             <Lightbulb className="w-3.5 h-3.5" />
-            Structured workplace navigation
+            Professional coaching principles, always available
           </div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold text-foreground leading-tight tracking-tight mb-4">
-            Navigate any{" "}
-            <span className="text-primary">workplace situation</span>
+            Your AI Workplace Coach,
             <br />
-            with confidence
+            <span className="text-primary">always in your corner</span>
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground font-body max-w-xl mx-auto leading-relaxed">
-            Use the 2-axis matrix to pinpoint your challenge, or ask the coach
-            directly — receive deep, personalised guidance from a world-class
-            advisor.
+            Navigate complex situations with the 2-axis matrix, ask the coach
+            anything, track your growth journey, and bookmark insights — all
+            private, all personalised.
           </p>
         </motion.div>
 

@@ -4,6 +4,7 @@ import {
   Award,
   Brain,
   Building2,
+  GraduationCap,
   Grid3X3,
   MessageCircle,
   Rocket,
@@ -23,6 +24,7 @@ import { MatrixType, MatrixWho } from "../hooks/useQueries";
 interface GrowthPathSectionProps {
   submissions: Scenario[];
   chats: ChatEntry[];
+  practiceCount?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -163,6 +165,7 @@ function StatCard({
 export function GrowthPathSection({
   submissions,
   chats,
+  practiceCount = 0,
 }: GrowthPathSectionProps) {
   // Compute explored cells
   const exploredCells = new Set(
@@ -228,7 +231,7 @@ export function GrowthPathSection({
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard
           icon={<Grid3X3 className="w-4 h-4" />}
           label="Scenarios"
@@ -256,6 +259,13 @@ export function GrowthPathSection({
           value={totalInteractions}
           sub="all coaching interactions"
           delay={0.15}
+        />
+        <StatCard
+          icon={<GraduationCap className="w-4 h-4" />}
+          label="Scenarios Practised"
+          value={practiceCount}
+          sub="practice scenarios completed"
+          delay={0.2}
         />
       </div>
 

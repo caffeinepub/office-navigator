@@ -118,3 +118,17 @@
       );
   }
 }
+
+@media print {
+  body > * {
+    display: none !important;
+  }
+  .coaching-card-print {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    padding: 2rem;
+    background: #1a1a2e;
+    color: white;
+  }
+}

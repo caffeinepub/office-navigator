@@ -1,30 +1,39 @@
-# Workplace Compass
+# Workplace Compass — Version 18
 
 ## Current State
-The app has 4 completed activities: free-text AI chat, role/experience/industry personalization, micro-actions ("Try this today"), and helpfulness feedback loop. The backend stores user scenarios (via `getRecentSubmissions`) and chat history (via `getRecentChats`). The frontend has tabs for Navigate, Ask Coach, and History. There is no growth/progress tracking tab.
+- Full AI coaching app with matrix navigation, free-text chat, practice scenarios
+- Personalization (role/experience/industry), micro-actions, feedback loop, progress tracking
+- Bookmarks, reflection journal, export as coaching card
+- Emotional tone detection (auto, not user-chosen)
+- No user-facing tone/coaching style selector
+- No audio/text-to-speech feature
+- No Reframe Engine, Communication Script Generator
+- Safety guardrails not explicitly enforced in prompts
 
 ## Requested Changes (Diff)
 
 ### Add
-- New "Growth Path" tab in the main navigation
-- Growth Path dashboard showing:
-  - Summary stats: total scenarios explored, total questions asked, categories covered (WHO + WHAT combinations)
-  - Milestone badges earned based on usage (e.g. "First Step", "Explorer", "Coach's Favourite", "Deep Thinker")
-  - Timeline/journey view: chronological list of all interactions (scenarios + chats) showing progression over time
-  - Category coverage map: visual grid showing which of the 9 matrix cells the user has explored
-  - Streak / consistency indicator (days with activity)
+1. **Audio Readout** — A speaker icon button on every coaching response dialog. Clicking plays the response using the Web Speech API (speechSynthesis). A small voice selector (Male / Female) appears inline. Stop button while playing. Preference saved to localStorage.
+2. **Tone Selector** — Before submitting any coaching request (matrix, chat, practice), user can choose coaching style: Mentor / Strategist / Motivator / Straight-Talker. Selected tone is prepended to the prompt and also affects the framing prefix in responses.
+3. **Reframe Engine** — A new tab or panel "Reframe It" where the user pastes a negative workplace situation and gets a positively-reframed version as a growth opportunity. Uses submitFreeChat with a reframing prompt prefix.
+4. **Communication Script Generator** — A new tab "Script Builder" where user selects a scenario type (difficult feedback, conflict resolution, salary negotiation, asking for promotion, declining extra work) and provides context, then gets a word-for-word script/email template.
+5. **Safety Guardrails** — All prompts going to the backend must include a safety prefix ensuring responses are forward-looking, positive, strengths-based, and never suggest harmful actions. This is enforced on the frontend prompt construction.
 
 ### Modify
-- Tab list to include the new "Growth Path" tab (4th tab)
+- Mode selector: add Reframe and Script tabs to the navigation (or integrate as sub-tabs under Ask Coach)
+- All coaching response dialogs: add audio playback controls
+- submitFreeChat calls: prepend tone selector context
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Compute growth stats in the frontend from existing `getRecentSubmissions` and `getRecentChats` data (no backend changes needed)
-2. Build `GrowthPathTab` component with:
-   - Stats cards (scenarios explored, questions asked, matrix cells covered)
-   - Badge/milestone system computed from stats
-   - 3x3 matrix coverage grid (9 cells, highlighted if explored)
-   - Timeline of recent activity (last 10 items, merged scenarios + chats)
-3. Add "Growth Path" to the Tabs component
+1. Add `voicePreference` state (male/female) to localStorage
+2. Create `useAudioPlayback` hook wrapping Web Speech API — loads voices, filters by gender keyword in voice name, exposes play/stop/isPlaying
+3. Add `AudioPlaybackBar` component: speaker icon, male/female toggle, play/stop button — reusable across all 3 response dialogs
+4. Add `ToneSelectorBar` component: 4-button toggle (Mentor/Strategist/Motivator/Straight-Talker) shown above the submit button in matrix, chat, and practice modes
+5. Modify all `submitFreeChat` prompt construction to prepend the chosen tone instruction
+6. Add `ReframeTab` component: textarea + submit + response display using submitFreeChat with reframe prefix; add to mode tabs
+7. Add `ScriptBuilderTab` component: scenario type dropdown + context textarea + submit + response display; add to mode tabs
+8. Add safety prefix to ALL coaching prompt construction functions
+9. Validate and deploy
