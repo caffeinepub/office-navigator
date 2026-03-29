@@ -55,7 +55,9 @@ import {
   Clock,
   Compass,
   Copy,
+  Download,
   FileText,
+  Globe,
   GraduationCap,
   Heart,
   KeyRound,
@@ -63,6 +65,7 @@ import {
   Loader2,
   LogOut,
   MessageCircle,
+  MessageSquare,
   Pencil,
   Play,
   Printer,
@@ -84,7 +87,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Scenario } from "./backend.d";
+import { DisclaimerModal } from "./components/DisclaimerModal";
 import { GrowthPathSection } from "./components/GrowthPathSection";
+import { VoiceDictationButton } from "./components/VoiceDictationButton";
+import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 import { useAuthActions, useAuthState } from "./hooks/useAuthState";
 import { useBookmarks } from "./hooks/useBookmarks";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
@@ -367,6 +373,165 @@ function parseSuggestions(items: string[]): {
     }
   }
   return { insights, microActions };
+}
+
+// ─── Inline Coaching Disclaimer ──────────────────────────────────────────────
+function CoachingDisclaimer() {
+  return (
+    <p className="text-xs text-muted-foreground italic mt-2 pt-2 border-t border-border/40 font-body">
+      Suggestions are for informational purposes only and at your sole
+      discretion. Workplace Compass accepts no liability for outcomes.
+    </p>
+  );
+}
+
+// ─── Feedback Form Dialog (Formspree) ─────────────────────────────────────────
+
+function FeedbackFormDialog() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(
+        "https://formspree.io/raviteja_joshi@outlook.com",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ name, email, message, _replyto: email }),
+        },
+      );
+      if (res.ok) {
+        setSubmitted(true);
+        setName("");
+        setEmail("");
+        setMessage("");
+        toast.success("Feedback sent! Thank you.");
+        setTimeout(() => {
+          setOpen(false);
+          setSubmitted(false);
+        }, 2000);
+      } else {
+        toast.error("Failed to send feedback. Please try again.");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="gap-1.5 font-body text-xs"
+        data-ocid="feedback_form.trigger"
+      >
+        <MessageSquare className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Feedback</span>
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Share Your Feedback
+            </DialogTitle>
+            <DialogDescription className="font-body text-sm">
+              Help us improve Workplace Compass — your feedback goes directly to
+              the team.
+            </DialogDescription>
+          </DialogHeader>
+          {submitted ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <CheckCircle2 className="w-10 h-10 text-green-500" />
+              <p className="font-body text-sm font-medium">
+                Thank you! Your feedback has been received.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="fb-name" className="font-body text-sm">
+                  Name (optional)
+                </Label>
+                <Input
+                  id="fb-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  className="font-body"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fb-email" className="font-body text-sm">
+                  Email (optional)
+                </Label>
+                <Input
+                  id="fb-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="font-body"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fb-message" className="font-body text-sm">
+                  Feedback <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  id="fb-message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="What's working well? What could be better?"
+                  rows={4}
+                  className="font-body resize-none"
+                  required
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  className="font-body"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting || !message.trim()}
+                  className="font-body"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Feedback"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 // ─── Feedback Widget ───────────────────────────────────────────────────────────
@@ -1273,7 +1438,13 @@ function ReframeTab({ coachingTone }: { coachingTone: CoachingTone }) {
           />
         </div>
         <ToneSelectorBar value={coachingTone} onChange={() => {}} />
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <VoiceDictationButton
+            onTranscript={(text) =>
+              setSituation((prev) => (prev ? `${prev} ${text}` : text))
+            }
+            disabled={submitChat.isPending}
+          />
           <Button
             data-ocid="reframe.submit_button"
             onClick={handleSubmit}
@@ -1343,6 +1514,7 @@ function ReframeTab({ coachingTone }: { coachingTone: CoachingTone }) {
                       feedbackKey={btoa(situation.slice(0, 50))}
                     />
                   </div>
+                  <CoachingDisclaimer />
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -1451,7 +1623,13 @@ function ScriptBuilderTab({ coachingTone }: { coachingTone: CoachingTone }) {
           />
         </div>
         <ToneSelectorBar value={coachingTone} onChange={() => {}} />
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <VoiceDictationButton
+            onTranscript={(text) =>
+              setContext((prev) => (prev ? `${prev} ${text}` : text))
+            }
+            disabled={submitChat.isPending}
+          />
           <Button
             data-ocid="scripts.submit_button"
             onClick={handleSubmit}
@@ -1521,6 +1699,7 @@ function ScriptBuilderTab({ coachingTone }: { coachingTone: CoachingTone }) {
                       feedbackKey={btoa(scenarioType.slice(0, 50))}
                     />
                   </div>
+                  <CoachingDisclaimer />
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -2262,24 +2441,32 @@ function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
             </kbd>{" "}
             to submit
           </p>
-          <Button
-            data-ocid="chat.submit_button"
-            onClick={handleSubmit}
-            disabled={submitChat.isPending || !question.trim() || isOverLimit}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold px-6 h-11 rounded-xl shadow-xs gap-2"
-          >
-            {submitChat.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Thinking…
-              </>
-            ) : (
-              <>
-                <MessageCircle className="w-4 h-4" />
-                Ask Coach
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <VoiceDictationButton
+              onTranscript={(text) =>
+                setQuestion((prev) => (prev ? `${prev} ${text}` : text))
+              }
+              disabled={submitChat.isPending}
+            />
+            <Button
+              data-ocid="chat.submit_button"
+              onClick={handleSubmit}
+              disabled={submitChat.isPending || !question.trim() || isOverLimit}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold px-6 h-11 rounded-xl shadow-xs gap-2"
+            >
+              {submitChat.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Thinking…
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="w-4 h-4" />
+                  Ask Coach
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -2345,6 +2532,7 @@ function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
                               feedbackKey={btoa(question.slice(0, 50))}
                             />
                           </div>
+                          <CoachingDisclaimer />
                         </>
                       );
                     })()}
@@ -2775,7 +2963,15 @@ function AuthenticatedApp() {
                         _setCoachingTone(t);
                       }}
                     />
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      <VoiceDictationButton
+                        onTranscript={(text) =>
+                          setScenarioText((prev) =>
+                            prev ? `${prev} ${text}` : text,
+                          )
+                        }
+                        disabled={isPending}
+                      />
                       <Button
                         data-ocid="scenario.submit_button"
                         onClick={handleSubmit}
@@ -3393,6 +3589,15 @@ function UnauthenticatedView({ onLogin }: { onLogin: () => void }) {
         ))}
       </div>
 
+      {/* Privacy Notice */}
+      <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-muted/60 border border-border/50 text-xs text-muted-foreground font-body mb-6">
+        <span>🔒</span>
+        <span>
+          Your privacy matters: all coaching conversations, bookmarks, and
+          journal entries are stored only on your device — never on our servers.
+        </span>
+      </div>
+
       <div className="bg-card rounded-2xl border border-border shadow-elevated p-10 max-w-md w-full text-center mt-6 mb-20">
         <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
           <ShieldCheck className="w-8 h-8 text-primary" />
@@ -3475,16 +3680,26 @@ const EXPERIENCE_OPTIONS = [
 ];
 
 const INDUSTRY_OPTIONS = [
-  "Technology",
+  "Information Technology & ITES",
+  "BPO / KPO / Outsourcing",
+  "Software & SaaS",
+  "IT Consulting & Services",
   "Finance & Banking",
-  "Healthcare",
-  "Education",
+  "Insurance",
+  "Healthcare & Pharmaceuticals",
+  "Education & EdTech",
   "Retail & E-commerce",
-  "Media & Creative",
+  "Media, Entertainment & Creative",
+  "Telecommunications",
+  "Manufacturing & Logistics",
+  "Engineering & Construction",
+  "Energy & Utilities",
   "Legal & Compliance",
   "Government & Public Sector",
-  "Non-profit",
-  "Manufacturing & Logistics",
+  "Non-profit & NGO",
+  "Hospitality & Travel",
+  "Real Estate",
+  "Startup / Entrepreneur",
   "Other",
 ];
 
@@ -3682,6 +3897,7 @@ function SetProfileDialog({
 // ─── Main App Shell ────────────────────────────────────────────────────────────
 
 function MainApp() {
+  const { t } = useLanguage();
   const { isAuthenticated, authLoading } = useAuthState();
   const { login, logout } = useAuthActions();
   const { identity } = useInternetIdentity();
@@ -3731,8 +3947,12 @@ function MainApp() {
 
           <div className="flex items-center gap-3">
             <span className="hidden sm:block text-sm text-muted-foreground font-body">
-              Turn workplace challenges into clear next steps
+              {t("landing_subline").slice(0, 50)}
             </span>
+
+            <LanguageSelector />
+
+            <FeedbackFormDialog />
 
             {authLoading ? (
               <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
@@ -3765,6 +3985,65 @@ function MainApp() {
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
+                      data-ocid="profile.export_button"
+                      onClick={() => {
+                        const keys = [
+                          "wc_chat_history",
+                          "wc_scenario_history",
+                          "wc_bookmarks",
+                          "wc_journal",
+                          "wc_practice_completions",
+                          "wc_voice_pref",
+                        ];
+                        const data: Record<string, unknown> = {};
+                        for (const k of keys) {
+                          try {
+                            data[k] = JSON.parse(
+                              localStorage.getItem(k) ?? "null",
+                            );
+                          } catch {
+                            data[k] = localStorage.getItem(k);
+                          }
+                        }
+                        const blob = new Blob([JSON.stringify(data, null, 2)], {
+                          type: "application/json",
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "workplace-compass-data.json";
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast.success("Data exported successfully.");
+                      }}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export My Data
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-ocid="profile.delete_button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "This will clear all your local coaching data (chats, scenarios, bookmarks, journal). This cannot be undone. Continue?",
+                          )
+                        ) {
+                          for (const k of Object.keys(localStorage).filter(
+                            (k) => k.startsWith("wc_"),
+                          )) {
+                            localStorage.removeItem(k);
+                          }
+                          window.location.reload();
+                        }
+                      }}
+                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Clear All My Data
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
                       data-ocid="auth.delete_button"
                       onClick={logout}
                       className="text-destructive focus:text-destructive gap-2 cursor-pointer"
@@ -3789,7 +4068,7 @@ function MainApp() {
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold rounded-xl gap-1.5"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                Sign In
+                {t("btn_login")}
               </Button>
             )}
           </div>
@@ -3809,14 +4088,14 @@ function MainApp() {
             Professional coaching principles, always available
           </div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold text-foreground leading-tight tracking-tight mb-4">
-            Your AI Workplace Coach,
+            {t("landing_headline").split(",")[0]},
             <br />
-            <span className="text-primary">always in your corner</span>
+            <span className="text-primary">
+              {t("landing_headline").split(",")[1] || "always in your corner"}
+            </span>
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground font-body max-w-xl mx-auto leading-relaxed">
-            Navigate complex situations with the 2-axis matrix, ask the coach
-            anything, track your growth journey, and bookmark insights — all
-            private, all personalised.
+            {t("landing_subline")}
           </p>
         </motion.div>
 
@@ -3877,10 +4156,45 @@ function MainApp() {
       </footer>
 
       <Toaster richColors position="top-right" />
+      <DisclaimerModal />
+    </div>
+  );
+}
+
+// ─── Language Selector Component ─────────────────────────────────────────────
+
+function LanguageSelector() {
+  const { language, setLanguage, languageNames } = useLanguage();
+  const langs = Object.entries(languageNames) as [
+    import("./i18n/translations").LangCode,
+    string,
+  ][];
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Globe className="w-4 h-4 text-muted-foreground" />
+      <select
+        value={language}
+        onChange={(e) =>
+          setLanguage(e.target.value as import("./i18n/translations").LangCode)
+        }
+        data-ocid="lang.select"
+        className="text-sm font-body bg-transparent border border-border rounded-lg px-2 py-1 text-foreground cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none focus:ring-2 focus:ring-ring max-w-[130px]"
+      >
+        {langs.map(([code, name]) => (
+          <option key={code} value={code}>
+            {name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
 
 export default function App() {
-  return <MainApp />;
+  return (
+    <LanguageProvider>
+      <MainApp />
+    </LanguageProvider>
+  );
 }
