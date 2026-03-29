@@ -35,41 +35,119 @@ actor {
     suggestions : [Text];
   };
 
+  public type ChatEntry = {
+    question : Text;
+    answer : [Text];
+    timestamp : Time.Time;
+  };
+
+  // V1 profile type: kept for stable variable migration (do not remove until next migration cycle)
+  type UserProfileV1 = { name : Text };
+
   public type UserProfile = {
     name : Text;
-    // Add more user-specific metadata as needed
+    role : ?Text;
+    experienceLevel : ?Text;
+    industry : ?Text;
   };
 
   let MAX_SUBMISSIONS = 20;
+  let MAX_CHATS = 30;
 
   let userSubmissions = Map.empty<Principal, List.List<Scenario>>();
-  let userProfiles = Map.empty<Principal, UserProfile>();
+  // userProfiles: kept with V1 type to safely read existing stable data during migration
+  let userProfiles = Map.empty<Principal, UserProfileV1>();
+  // userProfilesV2: new map with full UserProfile type (role/experienceLevel/industry)
+  let userProfilesV2 = Map.empty<Principal, UserProfile>();
+  let userChats = Map.empty<Principal, List.List<ChatEntry>>();
+
+  // Migrate V1 profiles to V2 on upgrade
+  system func postupgrade() {
+    for ((p, old) in userProfiles.entries()) {
+      if (userProfilesV2.get(p) == null) {
+        userProfilesV2.add(p, {
+          name = old.name;
+          role = null;
+          experienceLevel = null;
+          industry = null;
+        });
+      };
+    };
+  };
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can access profiles");
     };
-    userProfiles.get(caller);
+    switch (userProfilesV2.get(caller)) {
+      case (?p) { ?p };
+      case (null) {
+        // Fall back to V1 data (name only) for users not yet migrated
+        switch (userProfiles.get(caller)) {
+          case (?v1) { ?{ name = v1.name; role = null; experienceLevel = null; industry = null } };
+          case (null) { null };
+        };
+      };
+    };
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
     if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
-    userProfiles.get(user);
+    switch (userProfilesV2.get(user)) {
+      case (?p) { ?p };
+      case (null) {
+        switch (userProfiles.get(user)) {
+          case (?v1) { ?{ name = v1.name; role = null; experienceLevel = null; industry = null } };
+          case (null) { null };
+        };
+      };
+    };
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
-    userProfiles.add(caller, profile);
+    userProfilesV2.add(caller, profile);
   };
 
   // Cap an array to a maximum number of elements
   func capArray(arr : [Text], maxSize : Nat) : [Text] {
     if (arr.size() <= maxSize) return arr;
     Array.tabulate<Text>(maxSize, func(i) { arr[i] });
+  };
+
+  // Build a personalization context intro based on the user's profile
+  func getPersonalizationIntro(profile : ?UserProfile) : ?Text {
+    switch (profile) {
+      case (null) { null };
+      case (?p) {
+        let hasRole = switch (p.role) { case (?r) { r.size() > 0 }; case (null) { false } };
+        let hasExp = switch (p.experienceLevel) { case (?e) { e.size() > 0 }; case (null) { false } };
+        let hasInd = switch (p.industry) { case (?i) { i.size() > 0 }; case (null) { false } };
+        if (not hasRole and not hasExp and not hasInd) { return null };
+
+        let rolePart = switch (p.role) {
+          case (?r) { if (r.size() > 0) r else "professional" };
+          case (null) { "professional" };
+        };
+        let expPart = switch (p.experienceLevel) {
+          case (?e) { if (e.size() > 0) e else "" };
+          case (null) { "" };
+        };
+        let indPart = switch (p.industry) {
+          case (?i) { if (i.size() > 0) i else "" };
+          case (null) { "" };
+        };
+
+        let expText = if (expPart.size() > 0) " with " # expPart # " experience" else "";
+        let indText = if (indPart.size() > 0) " in the " # indPart # " sector" else "";
+
+        ?("This guidance is tailored for a " # rolePart # expText # indText # ". The insights below account for the typical dynamics, expectations, and stakes that come with your background — use them with that context in mind.");
+      };
+    };
   };
 
   func getIntersectionInsights(who : MatrixWho, challengeType : MatrixType) : [Text] {
@@ -215,7 +293,7 @@ actor {
       ]);
     };
 
-    if (text.contains(#text "gossip") or text.contains(#text "rumour") or text.contains(#text "spreading rumours")) {
+    if (text.contains(#text "gossip") or text.contains(#text "rumour") or text.contains(#text "spreading rumours") or text.contains(#text "rumor") or text.contains(#text "spreading rumors")) {
       insights := insights.concat([
         "Workplace gossip is corrosive and your best protection against it is a reputation built on consistent behaviour over time. In the short term, do not engage with or amplify rumours about others — it will come back to you. If you hear something being said about you, address it directly with the source if you can identify them: 'I've heard some things being said and I'd like to address them directly with you.' Silence in the face of known rumours is often read as confirmation.",
       ]);
@@ -249,47 +327,251 @@ actor {
       ]);
     };
 
-    if (text.contains(#text "job security") or text.contains(#text "redundancy") or text.contains(#text "layoff") or text.contains(#text "losing my job") or text.contains(#text "restructuring")) {
+    if (text.contains(#text "job security") or text.contains(#text "redundancy") or text.contains(#text "layoff") or text.contains(#text "laid off") or text.contains(#text "losing my job")) {
       insights := insights.concat([
-        "When job security feels uncertain, the most constructive thing you can do is take action rather than wait in anxiety. Update your CV now, reconnect with your professional network, and make your current contributions as visible and valuable as possible. People who are proactive during uncertain periods protect themselves regardless of outcome — they either demonstrate enough value to survive a cut, or they are prepared to move quickly if they don't.",
-        "If you have the opportunity, have a direct conversation with your manager about your position and role: 'I want to understand how you see my role in the current environment and what I should be focusing on to add the most value.' This is not a sign of insecurity — it is mature professional communication, and it gives your manager an opportunity to tell you things that are better said openly than left to rumour.",
+        "Job security anxiety is one of the most distracting and debilitating feelings in professional life, and the first step is separating what you know from what you fear. If you have received signals about your role — in writing, in conversation, or through changes to your team or responsibilities — take them seriously and respond proactively. If you are operating purely on anxiety and rumour, focus energy on what you can control: your output quality, your relationships, and your visibility.",
+        "Regardless of what happens, your primary career asset is your reputation and your network — both of which are fully portable. Use this period to actively maintain relationships outside your current organisation, update your professional profile, and make sure your key achievements are documented. Preparing quietly for transitions is not disloyal — it is prudent and responsible self-management.",
       ]);
     };
 
-    if (text.contains(#text "bullying") or text.contains(#text "bully") or text.contains(#text "abusive manager") or text.contains(#text "toxic boss")) {
+    if (text.contains(#text "bully") or text.contains(#text "bullying") or text.contains(#text "intimidat") or text.contains(#text "threatening")) {
       insights := insights.concat([
-        "Managing up when your direct manager is difficult requires a clear strategy. First, separate the behaviours you can work around from those that genuinely cross a line — such as public humiliation, threats, or deliberate sabotage. The former require adaptation and resilience; the latter require documentation and escalation. Mixing them up leads to either under-reacting to serious misconduct or over-escalating manageable friction.",
-        "If your manager's behaviour is affecting your wellbeing or your ability to do your job, you have every right to raise it with HR or their manager. Frame it as a professional concern: 'I want to raise a pattern of behaviour that I have been experiencing and that I believe is affecting team performance.' Bring specific, documented examples. Your concern is more likely to be taken seriously when it is grounded in facts and patterns rather than a single incident.",
+        "Workplace bullying is serious and you are not obliged to tolerate it. The first priority is your own safety and wellbeing — if you feel genuinely threatened or unsafe, that takes priority over any professional consideration. Start documenting every incident with full detail: date, time, what was said or done, any witnesses. This is your foundation for any formal action.",
+        "Report the behaviour through your organisation's formal channels — HR, your skip-level manager, or a designated wellbeing resource. If internal channels are unavailable or have failed, external bodies (employment tribunals, industry regulators) exist for exactly this purpose. Do not allow the desire to avoid conflict to prevent you from protecting yourself.",
       ]);
     };
 
-    if (text.contains(#text "deadline") or text.contains(#text "overworked") or text.contains(#text "overwhelmed") or text.contains(#text "too much work")) {
+    if (text.contains(#text "conflict") or text.contains(#text "argument") or text.contains(#text "disagreement") or text.contains(#text "tension")) {
       insights := insights.concat([
-        "When you are facing an impossible deadline or are overwhelmed by volume, the first step is triage — not panic. List everything you are responsible for, estimate how long each will genuinely take, and identify which items have hard vs. soft deadlines. Once you have that picture, you can have a meaningful conversation with your manager about trade-offs rather than a vague plea for help. Specificity transforms the conversation.",
+        "Workplace conflict is normal, and how you handle it says more about your professional maturity than whether it exists at all. The most important principle is to address it directly, privately, and early — conflict that is left to fester almost always becomes harder to resolve. Choose a neutral, private setting and come with curiosity rather than a predetermined verdict: 'I wanted to speak with you directly because I'd rather address this than let it affect our working relationship.'",
+        "When having a conflict conversation, focus on specific observable behaviours and their impact, not character assessments. 'When the deadline was missed without notice, the client presentation was affected' is far more productive than 'you are unreliable.' Your goal is a sustainable working relationship, not winning. Be prepared to hear something that reframes the situation entirely — the other person's perspective may contain information you don't have.",
       ]);
     };
 
-    if (text.contains(#text "not listened to") or text.contains(#text "being ignored") or text.contains(#text "not being heard") or text.contains(#text "dismissed by")) {
+    if (text.contains(#text "communication") or text.contains(#text "not listening") or text.contains(#text "ignored") or text.contains(#text "not heard")) {
       insights := insights.concat([
-        "Feeling consistently unheard or dismissed is demoralising, and the response needs to be both tactical and strategic. Tactically: prepare more thoroughly before meetings, put your key point in writing beforehand, and follow up verbally with a written summary. Strategically: build your credibility and relationships so that when you speak, there is already an established basis for people to take you seriously. Being heard is partly about timing and partly about reputation — both can be built deliberately.",
+        "If you feel your voice is not being heard, consider both what you are communicating and how you are communicating it. In many environments, the format matters as much as the content: a well-framed written summary often lands better than a verbal point made in a busy meeting. Find the channel and format that your audience actually reads and responds to, then use it consistently.",
+        "Being ignored or dismissed in meetings is a common and frustrating experience. The most effective counter is to build your credibility and relationships outside the room first — when people know and trust your judgment in one-on-one contexts, they are far more likely to receive your ideas in group settings. Seek allies who can amplify your points and give you credit in the room.",
+      ]);
+    };
+
+    if (text.contains(#text "resign") or text.contains(#text "quit") or text.contains(#text "leave my job") or text.contains(#text "should I leave") or text.contains(#text "new job")) {
+      insights := insights.concat([
+        "Deciding whether to leave a job is one of the most significant professional decisions you will make, and it deserves a clear-eyed assessment rather than an emotionally reactive one. Before deciding, separate the fixable from the structural: some problems (a difficult manager, a specific project, a workload spike) are temporary or addressable. Others (misaligned values, fundamental cultural toxicity, a role that cannot grow) are structural and no amount of personal effort will change them.",
+        "If you decide to move on, leave professionally regardless of how you feel. Your reputation in the industry is long — the people in this organisation will surface again, sometimes in important contexts. Give proper notice, complete handovers thoroughly, and say goodbye with grace. The way you exit is the last data point your current employer will use to assess your character, and it will be mentioned in references.",
+      ]);
+    };
+
+    if (text.contains(#text "feedback") or text.contains(#text "criticism") or text.contains(#text "critique") or text.contains(#text "negative review")) {
+      insights := insights.concat([
+        "Receiving difficult feedback is genuinely hard, and your first emotional reaction is almost never your best professional response. When you receive feedback that stings, give yourself a moment — even just a few hours — before deciding how to respond or whether to act on it. Ask yourself: is there any truth in this, even if the delivery was imperfect? The most valuable feedback often arrives in a form that is easy to dismiss.",
+        "If feedback feels wrong or unfair, you can push back — but do so by asking questions, not by defending. 'Can you give me a specific example so I can understand better?' is far more effective than 'I disagree with that assessment.' Questions signal engagement and humility. They also force vague or unfair feedback to either substantiate itself or reveal its weakness.",
+      ]);
+    };
+
+    if (text.contains(#text "salary") or text.contains(#text "pay") or text.contains(#text "raise") or text.contains(#text "underpaid") or text.contains(#text "compensation")) {
+      insights := insights.concat([
+        "Salary conversations are professional negotiations, not personal favours — approach them with data and confidence. Before the conversation, research market rates for your role, level, and geography using multiple sources. Know your number and the reasoning behind it before you enter the room. Coming with data removes the emotion from the conversation and frames your ask as a market correction, not a demand.",
+        "Timing matters in compensation conversations. The strongest moment to negotiate is when you have just delivered a significant result, received positive feedback, or been asked to take on additional scope. Avoid initiating the conversation during a period of organisational stress, budget freezes, or immediately after a challenge. When you make the ask, be direct and specific: 'Based on the market data I've reviewed and the scope of my current role, I believe my compensation should be [specific number].'",
+      ]);
+    };
+
+    if (text.contains(#text "work life balance") or text.contains(#text "work-life balance") or text.contains(#text "overworked") or text.contains(#text "too many hours") or text.contains(#text "no time for")) {
+      insights := insights.concat([
+        "Work-life balance is not a perk you are given — it is a boundary you establish and protect. The most important step is to define what sustainable looks like for you specifically, and then communicate it clearly rather than hoping it will be respected automatically. Many overwork situations persist because the individual keeps accepting more without flagging that the load is unsustainable. Naming it is the first and most important act.",
+        "When workload is genuinely unmanageable, escalate with specifics: 'I currently have these four priorities and they each require X hours. I want to make sure I'm focused on the right things — can we agree on which of these takes precedence?' This frames the conversation as alignment, not complaint, and gives your manager the information they need to either reprioritise or resource adequately.",
+      ]);
+    };
+
+    if (text.contains(#text "team lead") or text.contains(#text "leadership") or text.contains(#text "managing people") or text.contains(#text "new manager") or text.contains(#text "first time manager")) {
+      insights := insights.concat([
+        "Transitioning into a leadership role is one of the most significant professional shifts you will make — the skills that made you successful as an individual contributor are different from, and sometimes in tension with, what makes a great leader. The single most important shift is from doing to enabling: your job is now to make your team capable, not to be the most capable person on the team. This requires patience and deliberate unlearning.",
+        "In your first 90 days as a leader, prioritise listening over acting. Have genuine one-on-one conversations with every team member: understand what they are working on, what they find motivating, what they find frustrating, and what they need from you. You will make better decisions with this information than without it, and the act of asking builds trust that will serve you for the rest of your time in that role.",
       ]);
     };
 
     insights;
   };
 
-  public shared ({ caller }) func submitScenario(
-    text : Text,
-    who : ?MatrixWho,
-    challengeType : ?MatrixType,
-  ) : async [Text] {
+  // Free-text coaching: comprehensive keyword routing for any workplace question
+  func getFreeChatInsights(text : Text) : [Text] {
+    let lowerText = text;
+    var insights : [Text] = getKeywordInsights(lowerText);
+
+    if (insights.size() >= 3) {
+      return capArray(insights, 7);
+    };
+
+    if (lowerText.contains(#text "how do i") or lowerText.contains(#text "how should i") or lowerText.contains(#text "what should i do") or lowerText.contains(#text "advice") or lowerText.contains(#text "help me")) {
+      if (lowerText.contains(#text "difficult person") or lowerText.contains(#text "hard to work with") or lowerText.contains(#text "difficult colleague") or lowerText.contains(#text "difficult coworker")) {
+        insights := insights.concat([
+          "Working with a difficult person requires you to separate the person from the problem. Your goal is not to change who they are — it is to establish a working relationship that functions well enough for both of you to do your jobs. Focus entirely on observable work behaviours and specific outcomes, not character or personality.",
+          "The most common mistake with difficult colleagues is either avoidance or escalation — neither resolves the dynamic sustainably. A brief, direct private conversation about a specific behaviour is almost always more effective than either option. Keep the tone professional and forward-looking: 'I wanted to talk about [specific situation] and how we can work better together on this kind of thing.'",
+          "If the difficulty is ongoing and a direct conversation has not worked, document the pattern and bring it to your manager as a working-relationship concern, not a personal complaint. Frame it as: 'I'm raising this because I think it's affecting our team's output' — this keeps the focus where it belongs.",
+        ]);
+      };
+    };
+
+    if (lowerText.contains(#text "meeting") or lowerText.contains(#text "presentation") or lowerText.contains(#text "speaking up")) {
+      insights := insights.concat([
+        "In meetings, your influence is built before you walk in the room. Brief key stakeholders on your ideas one-on-one before the group session — when people have already heard and processed your point, they are far more likely to support it publicly. Walking in without preparation and hoping to be persuasive in real time is the hardest path.",
+        "If you struggle to speak up in meetings, use the first three minutes strategically. Making even a brief, constructive comment early — a question, an observation — resets how others perceive your engagement for the rest of the session. Silence in meetings is often read as disinterest or lack of preparation, regardless of the truth.",
+      ]);
+    };
+
+    if (insights.size() < 3) {
+      insights := insights.concat([
+        "Start by separating facts from interpretations. What specifically happened or is happening? What did you observe, hear, or receive in writing? Grounding yourself in observable facts before deciding how to respond gives you a significant advantage — it prevents emotional reactions from driving professional decisions, and it means you always have something concrete to refer to.",
+        "Before taking any action, consider your goal. Not your immediate emotional goal (to vent, to be right, to be acknowledged) but your actual professional goal: what outcome do you want from this situation? Identifying your real goal often clarifies the path forward immediately — and sometimes reveals that the action you were about to take would have moved you further from it.",
+        "Most workplace challenges are conversations that have not happened yet. Identify the one conversation — specific person, specific topic — that would most move the situation forward if it happened well. Then prepare for that conversation: know what you want to say, anticipate the response, and decide on your tone and setting. Prepared conversations rarely go as badly as unprepared ones.",
+        "Protect your professional reputation throughout whatever situation you are navigating. How you handle difficulty is what colleagues, managers, and stakeholders remember most. The person who raises a concern constructively, addresses a conflict directly, or exits gracefully is trusted with more and advanced further than the person who handles the same situations reactively or emotionally.",
+        "Trust your instincts about when a situation has crossed a line that requires formal action — but also be honest about the difference between a situation that is hard and one that is genuinely wrong. Hard situations (a difficult manager, a frustrating team dynamic, a stalled career) require strategy and self-management. Wrong situations (discrimination, bullying, illegal conduct) require formal documentation and escalation.",
+      ]);
+    };
+
+    capArray(insights, 7);
+  };
+
+
+  // Returns 2-3 concrete "Try this today" micro-actions, prefixed with "TRY:" for frontend detection
+  func getMicroActions(text : Text, who : ?MatrixWho, challengeType : ?MatrixType) : [Text] {
+    var actions : [Text] = [];
+
+    // Matrix-specific micro-actions
+    switch (who, challengeType) {
+      case (?#leaderManager, ?#behaviorActionable) {
+        actions := [
+          "TRY: Send your manager a brief update today — one paragraph on what you completed, what's next, and any blockers. Do this unprompted.",
+          "TRY: Schedule a 15-minute check-in with your manager this week and come with a clear agenda. Owning the structure of that meeting shifts the dynamic.",
+          "TRY: Write down one specific boundary or working preference and plan how you will raise it in your next one-on-one.",
+        ];
+      };
+      case (?#peerTeam, ?#behaviorActionable) {
+        actions := [
+          "TRY: Reach out to the colleague directly today — keep it short and factual: 'I wanted to check in on [specific issue]. Can we talk for 10 minutes?'",
+          "TRY: Write down one specific behaviour (not a character judgment) that you want to address. That is your talking point.",
+          "TRY: Identify one thing you can stop compensating for silently, and decide what you will do differently starting this week.",
+        ];
+      };
+      case (?#systemOrg, ?#behaviorActionable) {
+        actions := [
+          "TRY: Write a one-paragraph proposal for the change you want to see — include the problem, the fix, and the benefit to the team or org.",
+          "TRY: Identify who owns the process you want to change and schedule a conversation with them this week.",
+          "TRY: Find one small win you can implement immediately to build credibility before pushing for the larger change.",
+        ];
+      };
+      case (?#leaderManager, ?#perceptionMindset) {
+        actions := [
+          "TRY: Send a brief, unprompted update to your manager today — even if nothing is urgent. Consistent visibility reduces dependence on their responsiveness.",
+          "TRY: Write down three things you have accomplished in the last two weeks. Keep this list — you will need it.",
+          "TRY: Identify one peer or stakeholder outside your direct reporting line you can build a stronger relationship with this month.",
+        ];
+      };
+      case (?#peerTeam, ?#perceptionMindset) {
+        actions := [
+          "TRY: Identify the one or two colleagues you feel genuinely safe with and invest in those relationships this week.",
+          "TRY: The next time you are drawn into a negative conversation, redirect it once with a factual statement and then exit gracefully.",
+          "TRY: Write down your honest assessment of whether this environment is fixable — give yourself 15 minutes and be direct with yourself.",
+        ];
+      };
+      case (?#systemOrg, ?#perceptionMindset) {
+        actions := [
+          "TRY: Identify one genuine opportunity the current change creates for you — even a small one. Write it down.",
+          "TRY: Be the first person on your team to publicly engage constructively with the new direction this week.",
+          "TRY: If you have a concern, write it down as a specific, constructive proposal and decide who the right person to share it with is.",
+        ];
+      };
+      case (?#leaderManager, ?#careerGrowth) {
+        actions := [
+          "TRY: Ask your manager directly this week: 'What would I need to consistently demonstrate over the next six months for you to advocate for my promotion?'",
+          "TRY: Identify one stretch opportunity — a project, a presentation, a cross-team collaboration — and put your hand up for it.",
+          "TRY: Write down your key contributions and outcomes from the last three months. You should always have this ready.",
+        ];
+      };
+      case (?#peerTeam, ?#careerGrowth) {
+        actions := [
+          "TRY: Volunteer to present your team's work in the next available opportunity — even a brief slot in a team meeting counts.",
+          "TRY: Send a genuine, specific message of appreciation to a colleague whose work you have benefited from this week.",
+          "TRY: Identify one cross-team project you could contribute to and make a specific offer to help.",
+        ];
+      };
+      case (?#systemOrg, ?#careerGrowth) {
+        actions := [
+          "TRY: Volunteer for one implementation role in any current org change initiative — it builds cross-functional visibility immediately.",
+          "TRY: This week, position yourself publicly as someone who is adapting and contributing to the new direction.",
+          "TRY: Ask your manager: 'Where do you see the biggest opportunities for someone like me given the changes happening?'",
+        ];
+      };
+      case (_, _) {
+        // Fall through to keyword-based micro-actions below
+      };
+    };
+
+    // Keyword-based micro-actions (supplement or replace if no matrix match)
+    if (actions.size() == 0) {
+      if (text.contains(#text "micromanag") or text.contains(#text "micro-manag")) {
+        actions := [
+          "TRY: Send your manager a brief unprompted update today — what you completed, what's next, any risks. This one act often reduces micromanagement within days.",
+          "TRY: Prepare this sentence for your next one-on-one: 'I work best when I have space to execute and then share results — could we agree on a regular check-in rhythm?'",
+          "TRY: For one week, respond to every request with a specific timeline. Reliability on small things builds the trust that earns autonomy.",
+        ];
+      } else if (text.contains(#text "conflict") or text.contains(#text "argument") or text.contains(#text "disagreement")) {
+        actions := [
+          "TRY: Send a message today requesting a private conversation: 'I'd like to talk about [specific situation] — I'd rather address it directly than let it affect our work.'",
+          "TRY: Before that conversation, write down three specific, observable facts — not feelings or interpretations. Those are your talking points.",
+          "TRY: Identify what outcome you actually want from this situation. Write it at the top of your preparation notes.",
+        ];
+      } else if (text.contains(#text "burnout") or text.contains(#text "exhausted") or text.contains(#text "overwhelmed")) {
+        actions := [
+          "TRY: Block one hour tomorrow morning as protected time — no meetings, no email. Use it for your most important task or for genuine rest.",
+          "TRY: Have a conversation with your manager this week: 'I want to flag that I'm close to capacity — can we look at priorities together?'",
+          "TRY: Write down three things you will say no to or deprioritise this week. Recovery starts with reducing load, not pushing harder.",
+        ];
+      } else if (text.contains(#text "promotion") or text.contains(#text "career") or text.contains(#text "growth")) {
+        actions := [
+          "TRY: Ask your manager this week: 'What would I need to consistently demonstrate to be considered for the next level?'",
+          "TRY: Write down your three most significant contributions and outcomes from the past three months. Make this a living document.",
+          "TRY: Identify one person at the level above yours and ask them for a 20-minute conversation about their career path.",
+        ];
+      } else if (text.contains(#text "feedback") or text.contains(#text "criticism")) {
+        actions := [
+          "TRY: Respond to the feedback you received with one specific question: 'Can you give me an example so I can understand better?'",
+          "TRY: Write down the feedback as stated (not your reaction to it) and identify one thing in it that might be useful.",
+          "TRY: Ask someone you trust whether they have observed the same thing. An honest second opinion helps you calibrate.",
+        ];
+      } else if (text.contains(#text "salary") or text.contains(#text "pay") or text.contains(#text "raise") or text.contains(#text "underpaid")) {
+        actions := [
+          "TRY: Spend 30 minutes today researching market rates for your role and level. Write down your number and the data behind it.",
+          "TRY: Prepare this sentence: 'Based on the market data I've reviewed and the scope of my role, I believe my compensation should be [specific number].'",
+          "TRY: Identify the one recent result or contribution that best supports your ask. Lead with that when you make the request.",
+        ];
+      } else {
+        actions := [
+          "TRY: Identify the one specific conversation that would most move this situation forward — who, what topic, what outcome.",
+          "TRY: Write down three facts about the situation (observable, not interpretations) before deciding on your next action.",
+          "TRY: Schedule 20 minutes today to prepare for your next important interaction in this situation. Prepared conversations go better.",
+        ];
+      };
+    };
+
+    actions;
+  };
+
+  public shared ({ caller }) func submitScenario(text : Text, who : ?MatrixWho, challengeType : ?MatrixType) : async [Text] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can submit scenarios");
     };
 
     let timestamp = Time.now();
+    let profile = userProfilesV2.get(caller);
 
     var suggestions : [Text] = [];
+
+    // Prepend personalization intro if profile has role/exp/industry
+    switch (getPersonalizationIntro(profile)) {
+      case (?intro) { suggestions := [intro] };
+      case (null) {};
+    };
 
     switch (who, challengeType) {
       case (?w, ?t) {
@@ -301,17 +583,20 @@ actor {
 
     let keywordInsights = getKeywordInsights(text);
     if (keywordInsights.size() > 0) {
-      suggestions := keywordInsights.concat(suggestions);
+      suggestions := suggestions.concat(keywordInsights);
     };
 
-    suggestions := capArray(suggestions, 8);
+    suggestions := capArray(suggestions, 9);
+
+    let microActions = getMicroActions(text, who, challengeType);
+    let fullResult = suggestions.concat(microActions);
 
     let scenario : Scenario = {
       text;
       who;
       challengeType;
       timestamp;
-      suggestions;
+      suggestions = fullResult;
     };
 
     let submissions = switch (userSubmissions.get(caller)) {
@@ -327,7 +612,7 @@ actor {
 
     userSubmissions.add(caller, submissions);
 
-    suggestions;
+    fullResult;
   };
 
   public query ({ caller }) func getRecentSubmissions() : async [Scenario] {
@@ -336,6 +621,64 @@ actor {
     };
     switch (userSubmissions.get(caller)) {
       case (?submissions) { submissions.values().toArray() };
+      case (null) { [] };
+    };
+  };
+
+  // ─── Free Chat ───────────────────────────────────────────────────────────────
+
+  public shared ({ caller }) func submitFreeChat(question : Text) : async [Text] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can use the chat");
+    };
+    if (question.size() == 0) {
+      Runtime.trap("Question cannot be empty");
+    };
+
+    let profile = userProfilesV2.get(caller);
+    var answer = getFreeChatInsights(question);
+
+    // Prepend personalization intro if profile has role/exp/industry
+    switch (getPersonalizationIntro(profile)) {
+      case (?intro) { answer := [intro].concat(answer) };
+      case (null) {};
+    };
+
+    answer := capArray(answer, 8);
+
+    let chatMicroActions = getMicroActions(question, null, null);
+    let fullAnswer = answer.concat(chatMicroActions);
+
+    let timestamp = Time.now();
+    let entry : ChatEntry = { question; answer = fullAnswer; timestamp };
+
+    let chats = switch (userChats.get(caller)) {
+      case (?list) { list };
+      case (null) { List.empty<ChatEntry>() };
+    };
+
+    chats.add(entry);
+
+    while (chats.size() > MAX_CHATS) {
+      ignore chats.removeLast();
+    };
+
+    userChats.add(caller, chats);
+
+    fullAnswer;
+  };
+
+  public query ({ caller }) func getRecentChats() : async [ChatEntry] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can retrieve chats");
+    };
+    switch (userChats.get(caller)) {
+      case (?chats) {
+        let arr = chats.values().toArray();
+        let n = arr.size();
+        let take = if (n > 10) 10 else n;
+        Array.tabulate<ChatEntry>(take, func(i) { arr[i] });
+      };
       case (null) { [] };
     };
   };

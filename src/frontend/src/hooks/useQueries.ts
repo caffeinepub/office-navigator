@@ -10,6 +10,12 @@ import { useAuthState } from "./useAuthState";
 
 export { MatrixWho, MatrixType };
 
+export interface ChatEntry {
+  question: string;
+  answer: string[];
+  timestamp: bigint;
+}
+
 export function useGetRecentSubmissions() {
   const { actor, isFetching } = useActor();
   return useQuery<Scenario[]>({
@@ -67,5 +73,42 @@ export function useSaveCallerUserProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["callerUserProfile"] });
     },
+  });
+}
+
+export function useSubmitFreeChat() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation<string[], Error, string>({
+    mutationFn: async (question) => {
+      if (!actor) throw new Error("Actor not ready");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = actor as any;
+      if (typeof a.submitFreeChat !== "function") {
+        throw new Error("submitFreeChat not available");
+      }
+      return a.submitFreeChat(question);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recentChats"] });
+    },
+  });
+}
+
+export function useGetRecentChats() {
+  const { actor, isFetching } = useActor();
+  const { isAuthenticated } = useAuthState();
+  return useQuery<ChatEntry[]>({
+    queryKey: ["recentChats"],
+    queryFn: async () => {
+      if (!actor) return [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = actor as any;
+      if (typeof a.getRecentChats !== "function") return [];
+      return a.getRecentChats();
+    },
+    enabled: !!actor && !isFetching && isAuthenticated,
+    refetchInterval: 30_000,
   });
 }

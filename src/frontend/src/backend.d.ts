@@ -10,6 +10,9 @@ export type Option<T> = Some<T> | None;
 export type Time = bigint;
 export interface UserProfile {
     name: string;
+    role?: string | null;
+    experienceLevel?: string | null;
+    industry?: string | null;
 }
 export interface Scenario {
     who?: MatrixWho;
