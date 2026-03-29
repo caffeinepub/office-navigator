@@ -1,57 +1,38 @@
 # Workplace Compass
 
 ## Current State
-App.tsx (4161 lines) contains all UI text hardcoded in English. The app has a header, navigation tabs (Get Guidance, Ask Coach, Practice Scenarios, Reframe It, Generate Script, Saved, Journal, Growth Path), and various forms and coaching dialogs. There is no language switching mechanism.
+
+Full-featured AI Workplace Coach with:
+- AppMode: `matrix | chat | practice | reframe | scripts`
+- SetProfileDialog: name, role, experienceLevel, industry
+- Voice preference (male/female) stored in `wc_voice_pref` localStorage key in AudioPlaybackBar component (local to each response, not in profile dialog)
+- Language selector (LanguageSelector component, separate from profile)
+- GrowthPathSection: stats, badges, timeline
+- All data in localStorage
 
 ## Requested Changes (Diff)
 
 ### Add
-- `src/frontend/src/i18n/translations.ts` — Translation strings for all 15 languages covering all major UI labels, button text, placeholders, tab names, disclaimers, error messages, and section headings
-- `src/frontend/src/contexts/LanguageContext.tsx` — React context with `language`, `setLanguage`, and `t()` translation function. Persists chosen language to localStorage under `wc_language`.
-- Language selector dropdown in the app header (globe icon + language name) visible on both authenticated and unauthenticated views
+1. **AI Coach Voice & Language in User Profile** -- Add voice preference (male/female) and preferred language selectors to the SetProfileDialog. On save, sync them to localStorage (`wc_voice_pref`, `wc_language_pref`). This centralises management so users don't need to change voice per response.
+2. **90-Day Goal Tracker** -- New mode `goals` added to AppMode. User sets a 90-day career goal (text) with target date. Stored in localStorage (`wc_90day_goal`). Current goal displayed as a banner on matrix/chat screens. Sessions optionally tagged to the goal. Simple progress notes (user can add text milestones).
+3. **Confidence Tracker** -- Before showing coaching results (in matrix mode), show a quick 1-10 confidence slider ("Rate your confidence before coaching"). After reading the response, prompt rating again. Store pairs with date in localStorage (`wc_confidence_log`). A chart in GrowthPath section shows confidence trend over time.
+4. **Weekly Wins Journal** -- New tab in the history/saved area ("Wins" tab). User logs weekly wins with a title and optional note. A banner shows every Friday nudging the user to log. Stored in `wc_weekly_wins`. The coach will reference past wins when they exist.
 
 ### Modify
-- `App.tsx` — Replace all hardcoded English UI strings with `t('key')` calls from the language context. Wrap the app in `<LanguageProvider>`.
+- `SetProfileDialog`: add voice preference radio (male/female) and preferred language select
+- `AppMode` type: add `goals`
+- `GrowthPathSection`: add confidence chart (using recharts/chart.tsx)
+- History tabs: add "Wins" tab
+- `AudioPlaybackBar`: read voice pref from localStorage on mount so it syncs with profile setting
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
 
-### Languages to support (15+)
-1. English (en) — default
-2. Hindi (hi)
-3. Telugu (te)
-4. Tamil (ta)
-5. Kannada (kn)
-6. Marathi (mr)
-7. Bengali (bn)
-8. Odia (or)
-9. Spanish (es)
-10. French (fr)
-11. Arabic (ar) — RTL
-12. Mandarin Chinese (zh)
-13. Portuguese (pt)
-14. Russian (ru)
-15. Japanese (ja)
-16. German (de)
-17. Indonesian (id)
-
-### Translation keys to cover
-- All tab names and navigation labels
-- All button text (Get Guidance, Ask Coach, Save Profile, Export, etc.)
-- All section headings and subheadings
-- All placeholder text in inputs/textareas
-- Common status messages (Loading..., Something went wrong, etc.)
-- Legal disclaimer text
-- Landing page headline, subline, feature cards
-- Profile form labels (Name, Role, Experience, Industry)
-- Growth Path section labels
-- Coaching response labels (Try This Today, Micro-actions, etc.)
-
-### Technical approach
-- Keep translations.ts as a plain object map: `{ [langCode]: { [key]: string } }`
-- `t(key)` falls back to English if key missing in selected language
-- Language selector: a `<Select>` dropdown in the header showing flag emoji + language name
-- For Arabic (RTL), add `dir="rtl"` to the html element when Arabic is selected
-- All existing functionality remains unchanged; this is a UI text layer only
+1. Add voice + language fields to SetProfileDialog; on save write to localStorage
+2. Create `GoalTrackerMode` component: set/edit 90-day goal, milestone notes, goal banner
+3. Create `ConfidenceTracker` -- pre/post slider modal, store log, add confidence chart to GrowthPath
+4. Add `WeeklyWinsTab` inside the history tabs, Friday nudge banner
+5. Wire new mode button "Goals" into navigation bar
+6. Validate and build

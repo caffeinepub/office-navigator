@@ -160,6 +160,187 @@ function StatCard({
   );
 }
 
+// ─── Confidence Journey ──────────────────────────────────────────────────────
+
+interface ConfidenceEntry {
+  date: string;
+  pre: number;
+  post: number;
+}
+
+function ConfidenceJourney() {
+  const entries: ConfidenceEntry[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("wc_confidence_log") ?? "[]");
+    } catch {
+      return [];
+    }
+  })();
+
+  if (entries.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4, duration: 0.35 }}
+        className="bg-card border border-border shadow rounded-2xl p-5 mb-6"
+        data-ocid="growth.panel"
+      >
+        <p className="font-body text-xs text-muted-foreground uppercase tracking-wide mb-3">
+          Confidence Journey
+        </p>
+        <div
+          data-ocid="growth.empty_state"
+          className="text-center py-8 border border-dashed border-border rounded-xl"
+        >
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-2">
+            <Star className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <p className="font-body text-sm text-muted-foreground">
+            No confidence data yet.
+          </p>
+          <p className="font-body text-xs text-muted-foreground/70 mt-1">
+            Rate your confidence before/after coaching sessions to track growth
+            here.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  const recent = entries.slice(-10);
+  const maxVal = 10;
+  const chartH = 120;
+  const chartW = 400;
+  const padL = 28;
+  const padB = 20;
+  const padR = 10;
+  const plotW = chartW - padL - padR;
+  const plotH = chartH - padB;
+  const n = recent.length;
+
+  const xPos = (i: number) =>
+    padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yPos = (val: number) => plotH - (val / maxVal) * plotH;
+
+  const prePoints = recent.map((e, i) => `${xPos(i)},${yPos(e.pre)}`).join(" ");
+  const postPoints = recent
+    .map((e, i) => `${xPos(i)},${yPos(e.post)}`)
+    .join(" ");
+
+  const avgPre =
+    Math.round((recent.reduce((s, e) => s + e.pre, 0) / n) * 10) / 10;
+  const avgPost =
+    Math.round((recent.reduce((s, e) => s + e.post, 0) / n) * 10) / 10;
+  const improvement = Math.round((avgPost - avgPre) * 10) / 10;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4, duration: 0.35 }}
+      className="bg-card border border-border shadow rounded-2xl p-5 mb-6"
+      data-ocid="growth.panel"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-body text-xs text-muted-foreground uppercase tracking-wide">
+          Confidence Journey
+        </p>
+        <div className="flex gap-3 text-xs font-body">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 bg-blue-400 rounded" />
+            Pre ({avgPre})
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 bg-emerald-500 rounded" />
+            Post ({avgPost})
+          </span>
+          {improvement > 0 && (
+            <span className="text-emerald-600 font-semibold">
+              +{improvement} avg boost
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${chartW} ${chartH}`}
+          className="w-full"
+          style={{ minWidth: "280px" }}
+        >
+          <title>Confidence journey: pre and post session scores</title>
+          {/* Y-axis gridlines */}
+          {[2, 4, 6, 8, 10].map((v) => (
+            <g key={v}>
+              <line
+                x1={padL}
+                y1={yPos(v)}
+                x2={chartW - padR}
+                y2={yPos(v)}
+                stroke="currentColor"
+                strokeOpacity="0.08"
+                strokeWidth="1"
+              />
+              <text
+                x={padL - 4}
+                y={yPos(v) + 3}
+                textAnchor="end"
+                fontSize="8"
+                fill="currentColor"
+                fillOpacity="0.4"
+              >
+                {v}
+              </text>
+            </g>
+          ))}
+          {/* Pre line */}
+          <polyline
+            points={prePoints}
+            fill="none"
+            stroke="#60a5fa"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {/* Post line */}
+          <polyline
+            points={postPoints}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {/* Dots */}
+          {recent.map((e, i) => (
+            <g key={`dot-${e.date}-${i}`}>
+              <circle cx={xPos(i)} cy={yPos(e.pre)} r="3" fill="#60a5fa" />
+              <circle cx={xPos(i)} cy={yPos(e.post)} r="3" fill="#10b981" />
+            </g>
+          ))}
+          {/* X-axis labels */}
+          {recent.map((e, i) => (
+            <text
+              key={`label-${e.date}-${i}`}
+              x={xPos(i)}
+              y={chartH - 4}
+              textAnchor="middle"
+              fontSize="7"
+              fill="currentColor"
+              fillOpacity="0.4"
+            >
+              {new Date(e.date).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+            </text>
+          ))}
+        </svg>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function GrowthPathSection({
@@ -456,6 +637,9 @@ export function GrowthPathSection({
           </div>
         </motion.div>
       )}
+
+      {/* Confidence Journey */}
+      <ConfidenceJourney />
 
       {/* Empty state */}
       {totalInteractions === 0 && (

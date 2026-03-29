@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +52,7 @@ import {
   BookmarkCheck,
   Brain,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   Clock,
@@ -66,16 +69,21 @@ import {
   LogOut,
   MessageCircle,
   MessageSquare,
+  Mic,
   Pencil,
   Play,
+  Plus,
   Printer,
   RefreshCw,
   Rocket,
   ShieldCheck,
   Square,
+  Star,
   Swords,
+  Target,
   Trash2,
   TrendingUp,
+  Trophy,
   User,
   Users,
   Volume2,
@@ -2597,7 +2605,7 @@ function AskCoachPanel({ coachingTone }: { coachingTone: CoachingTone }) {
 
 // ─── Authenticated App ─────────────────────────────────────────────────────────
 
-type AppMode = "matrix" | "chat" | "practice" | "reframe" | "scripts";
+type AppMode = "matrix" | "chat" | "practice" | "reframe" | "scripts" | "goals";
 
 function AuthenticatedApp() {
   const [mode, setMode] = useState<AppMode>("matrix");
@@ -2608,6 +2616,13 @@ function AuthenticatedApp() {
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [showResultsDialog, setShowResultsDialog] = useState(false);
   const [showMatrixExportModal, setShowMatrixExportModal] = useState(false);
+  const [showConfidencePreModal, setShowConfidencePreModal] = useState(false);
+  const [confidencePreScore, setConfidencePreScore] = useState(5);
+  const [pendingConfidencePre, setPendingConfidencePre] = useState<
+    number | null
+  >(null);
+  const [confidencePostScore, setConfidencePostScore] = useState(5);
+  const [showWinsTab, setShowWinsTab] = useState(false);
   const { bookmarks, toggleBookmark } = useBookmarks();
   const [practiceCount, setPracticeCount] = useState(
     () => getPracticeCompletions().length,
@@ -2647,17 +2662,41 @@ function AuthenticatedApp() {
       toast.error("Please complete both selection steps first.");
       return;
     }
+    // Show confidence pre-rating modal
+    setConfidencePreScore(5);
+    setShowConfidencePreModal(true);
+  };
+
+  const handleSubmitAfterConfidence = async (preScore: number) => {
+    setPendingConfidencePre(preScore);
+    setShowConfidencePreModal(false);
     try {
       const result = await submitMutation.mutateAsync({
         text: buildPrompt(scenarioText.trim(), coachingTone),
-        who: selectedWho,
-        challengeType: selectedType,
+        who: selectedWho!,
+        challengeType: selectedType!,
       });
       setSuggestions(result);
+      setConfidencePostScore(5);
       setShowResultsDialog(true);
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
+  };
+
+  const handleLogConfidencePost = () => {
+    if (pendingConfidencePre === null) return;
+    const existing = JSON.parse(
+      localStorage.getItem("wc_confidence_log") ?? "[]",
+    );
+    existing.push({
+      date: new Date().toISOString(),
+      pre: pendingConfidencePre,
+      post: confidencePostScore,
+    });
+    localStorage.setItem("wc_confidence_log", JSON.stringify(existing));
+    setPendingConfidencePre(null);
+    toast.success("Confidence logged!");
   };
 
   const isPending = submitMutation.isPending;
@@ -2738,6 +2777,19 @@ function AuthenticatedApp() {
             <FileText className="w-4 h-4" />
             Script Builder
           </button>
+          <button
+            type="button"
+            data-ocid="goals.tab"
+            onClick={() => setMode("goals")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-body transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              mode === "goals"
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            90-Day Goals
+          </button>
         </div>
       </motion.div>
 
@@ -2755,6 +2807,92 @@ function AuthenticatedApp() {
           </span>
         </motion.div>
       )}
+
+      {/* 90-Day Goal Banner */}
+      {(mode === "matrix" || mode === "chat") &&
+        (() => {
+          const goalData = (() => {
+            try {
+              return JSON.parse(
+                localStorage.getItem("wc_90day_goal") ?? "null",
+              );
+            } catch {
+              return null;
+            }
+          })();
+          if (!goalData) return null;
+          const start = new Date(goalData.startDate).getTime();
+          const end = new Date(goalData.targetDate).getTime();
+          const now = Date.now();
+          const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
+          const daysLeft = Math.max(0, Math.round((end - now) / 86400000));
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 text-sm font-body"
+              data-ocid="goals.panel"
+            >
+              <Target className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="flex-1 text-amber-800 dark:text-amber-300 truncate font-medium">
+                🎯 Goal: {goalData.goal}
+              </span>
+              <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold whitespace-nowrap">
+                {daysLeft}d left of {daysTotal}d
+              </span>
+            </motion.div>
+          );
+        })()}
+
+      {/* Friday Wins Nudge */}
+      {new Date().getDay() === 5 &&
+        (() => {
+          const wins: {
+            id: string;
+            title: string;
+            note: string;
+            date: string;
+          }[] = (() => {
+            try {
+              return JSON.parse(localStorage.getItem("wc_weekly_wins") ?? "[]");
+            } catch {
+              return [];
+            }
+          })();
+          const thisWeekStart = new Date();
+          thisWeekStart.setDate(
+            thisWeekStart.getDate() - thisWeekStart.getDay(),
+          );
+          thisWeekStart.setHours(0, 0, 0, 0);
+          const hasWinThisWeek = wins.some(
+            (w) => new Date(w.date) >= thisWeekStart,
+          );
+          if (hasWinThisWeek) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 text-sm font-body"
+              data-ocid="wins.panel"
+            >
+              <Trophy className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="flex-1 text-emerald-800 dark:text-emerald-300 font-medium">
+                🏆 It&apos;s Friday! Take a moment to log this week&apos;s wins.
+              </span>
+              <button
+                type="button"
+                data-ocid="wins.open_modal_button"
+                onClick={() => {
+                  setShowWinsTab(true);
+                  setMode("matrix");
+                }}
+                className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 underline whitespace-nowrap ml-2"
+              >
+                Log a Win
+              </button>
+            </motion.div>
+          );
+        })()}
 
       <AnimatePresence mode="wait">
         {mode === "matrix" ? (
@@ -3071,7 +3209,7 @@ function AuthenticatedApp() {
               <ReframeTab coachingTone={coachingTone} />
             </div>
           </motion.div>
-        ) : (
+        ) : mode === "scripts" ? (
           <motion.div
             key="scripts"
             initial={{ opacity: 0, y: 10 }}
@@ -3096,6 +3234,31 @@ function AuthenticatedApp() {
               <ScriptBuilderTab coachingTone={coachingTone} />
             </div>
           </motion.div>
+        ) : (
+          <motion.div
+            key="goals"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="bg-card rounded-2xl border border-border shadow-elevated p-6 sm:p-8 mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Target className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    90-Day Goal Tracker
+                  </h2>
+                  <p className="text-xs text-muted-foreground font-body">
+                    Set a career goal and track milestones over 90 days.
+                  </p>
+                </div>
+              </div>
+              <GoalTrackerTab />
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -3113,7 +3276,10 @@ function AuthenticatedApp() {
           )}
         </div>
 
-        <Tabs defaultValue="scenarios">
+        <Tabs
+          defaultValue={showWinsTab ? "wins" : "scenarios"}
+          onValueChange={() => setShowWinsTab(false)}
+        >
           <TabsList
             className="mb-5 h-10 flex-wrap gap-1"
             data-ocid="history.tab"
@@ -3157,6 +3323,14 @@ function AuthenticatedApp() {
             >
               <FileText className="w-3.5 h-3.5 mr-1" />
               Journal
+            </TabsTrigger>
+            <TabsTrigger
+              value="wins"
+              className="font-body text-sm"
+              data-ocid="wins.tab"
+            >
+              <Trophy className="w-3.5 h-3.5 mr-1" />
+              Weekly Wins
             </TabsTrigger>
           </TabsList>
 
@@ -3236,6 +3410,9 @@ function AuthenticatedApp() {
           <TabsContent value="journal">
             <JournalTab />
           </TabsContent>
+          <TabsContent value="wins">
+            <WeeklyWinsTab />
+          </TabsContent>
         </Tabs>
       </section>
 
@@ -3311,6 +3488,49 @@ function AuthenticatedApp() {
                               feedbackKey={btoa(scenarioText.slice(0, 50))}
                             />
                           </div>
+                          {pendingConfidencePre !== null && (
+                            <div
+                              className="mt-4 pt-3 border-t border-border/40 space-y-3"
+                              data-ocid="confidence.panel"
+                            >
+                              <p className="text-sm font-semibold font-body text-foreground flex items-center gap-2">
+                                <Star className="w-4 h-4 text-amber-500" />
+                                How do you feel after this session? Rate your
+                                confidence (1–10)
+                              </p>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground font-body">
+                                  1
+                                </span>
+                                <Slider
+                                  min={1}
+                                  max={10}
+                                  step={1}
+                                  value={[confidencePostScore]}
+                                  onValueChange={(v) =>
+                                    setConfidencePostScore(v[0])
+                                  }
+                                  className="flex-1"
+                                  data-ocid="confidence.toggle"
+                                />
+                                <span className="text-xs text-muted-foreground font-body">
+                                  10
+                                </span>
+                                <span className="text-sm font-bold text-primary w-6 text-center">
+                                  {confidencePostScore}
+                                </span>
+                              </div>
+                              <Button
+                                data-ocid="confidence.submit_button"
+                                size="sm"
+                                onClick={handleLogConfidencePost}
+                                className="bg-amber-500 hover:bg-amber-600 text-white font-body font-semibold gap-1.5"
+                              >
+                                <Star className="w-3.5 h-3.5" />
+                                Log It
+                              </Button>
+                            </div>
+                          )}
                         </>
                       );
                     })()}
@@ -3355,6 +3575,70 @@ function AuthenticatedApp() {
           </Dialog>
         )}
       </AnimatePresence>
+
+      {/* Confidence Pre-Coaching Modal */}
+      <Dialog
+        open={showConfidencePreModal}
+        onOpenChange={setShowConfidencePreModal}
+      >
+        <DialogContent
+          className="max-w-sm font-body"
+          data-ocid="confidence.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg font-bold text-foreground flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500" />
+              Rate Your Confidence
+            </DialogTitle>
+            <DialogDescription className="font-body text-sm text-muted-foreground">
+              How confident do you feel about this situation right now? (1–10)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground font-body">1</span>
+              <Slider
+                min={1}
+                max={10}
+                step={1}
+                value={[confidencePreScore]}
+                onValueChange={(v) => setConfidencePreScore(v[0])}
+                className="flex-1"
+                data-ocid="confidence.toggle"
+              />
+              <span className="text-xs text-muted-foreground font-body">
+                10
+              </span>
+              <span className="text-lg font-bold text-primary w-8 text-center">
+                {confidencePreScore}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground font-body text-center">
+              This helps track your confidence growth over time.
+            </p>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              data-ocid="confidence.cancel_button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfidencePreModal(false)}
+              className="font-body"
+            >
+              Skip
+            </Button>
+            <Button
+              data-ocid="confidence.confirm_button"
+              size="sm"
+              onClick={() => handleSubmitAfterConfidence(confidencePreScore)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
+            >
+              <Star className="w-3.5 h-3.5" />
+              Start Coaching
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Matrix export modal */}
       {suggestions &&
@@ -3703,6 +3987,459 @@ const INDUSTRY_OPTIONS = [
   "Other",
 ];
 
+// ─── 90-Day Goal Tracker ──────────────────────────────────────────────────────
+
+interface GoalData {
+  goal: string;
+  startDate: string;
+  targetDate: string;
+  milestones: { text: string; date: string; done: boolean }[];
+}
+
+const GOAL_KEY = "wc_90day_goal";
+
+function GoalTrackerTab() {
+  const [goalData, setGoalData] = useState<GoalData | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(GOAL_KEY) ?? "null");
+    } catch {
+      return null;
+    }
+  });
+  const [goalInput, setGoalInput] = useState("");
+  const [targetDate, setTargetDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 90);
+    return d.toISOString().split("T")[0];
+  });
+  const [milestoneInput, setMilestoneInput] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  const saveGoal = () => {
+    if (!goalInput.trim()) {
+      toast.error("Please enter a goal.");
+      return;
+    }
+    const data: GoalData = {
+      goal: goalInput.trim(),
+      startDate: new Date().toISOString(),
+      targetDate,
+      milestones: [],
+    };
+    localStorage.setItem(GOAL_KEY, JSON.stringify(data));
+    setGoalData(data);
+    setEditing(false);
+    toast.success("90-day goal set!");
+  };
+
+  const clearGoal = () => {
+    localStorage.removeItem(GOAL_KEY);
+    setGoalData(null);
+    setGoalInput("");
+    const d = new Date();
+    d.setDate(d.getDate() + 90);
+    setTargetDate(d.toISOString().split("T")[0]);
+  };
+
+  const addMilestone = () => {
+    if (!milestoneInput.trim() || !goalData) return;
+    const updated = {
+      ...goalData,
+      milestones: [
+        ...goalData.milestones,
+        {
+          text: milestoneInput.trim(),
+          date: new Date().toISOString(),
+          done: false,
+        },
+      ],
+    };
+    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
+    setGoalData(updated);
+    setMilestoneInput("");
+  };
+
+  const toggleMilestone = (idx: number) => {
+    if (!goalData) return;
+    const milestones = goalData.milestones.map((m, i) =>
+      i === idx ? { ...m, done: !m.done } : m,
+    );
+    const updated = { ...goalData, milestones };
+    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
+    setGoalData(updated);
+  };
+
+  const deleteMilestone = (idx: number) => {
+    if (!goalData) return;
+    const milestones = goalData.milestones.filter((_, i) => i !== idx);
+    const updated = { ...goalData, milestones };
+    localStorage.setItem(GOAL_KEY, JSON.stringify(updated));
+    setGoalData(updated);
+  };
+
+  if (!goalData || editing) {
+    return (
+      <div className="space-y-5" data-ocid="goals.panel">
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium font-body">
+            What is your 90-day career goal?
+          </Label>
+          <Textarea
+            data-ocid="goals.textarea"
+            value={goalInput}
+            onChange={(e) => setGoalInput(e.target.value)}
+            placeholder="e.g. Get promoted to Senior Manager by demonstrating leadership in cross-functional projects…"
+            className="min-h-[100px] text-sm font-body resize-none"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium font-body flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5 text-primary" />
+            Target Date
+          </Label>
+          <input
+            type="date"
+            data-ocid="goals.input"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        <div className="flex gap-2">
+          {editing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditing(false)}
+              className="font-body"
+              data-ocid="goals.cancel_button"
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            data-ocid="goals.submit_button"
+            onClick={saveGoal}
+            disabled={!goalInput.trim()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body font-semibold gap-2"
+          >
+            <Target className="w-4 h-4" />
+            {editing ? "Update Goal" : "Set My 90-Day Goal"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const start = new Date(goalData.startDate).getTime();
+  const end = new Date(goalData.targetDate).getTime();
+  const now = Date.now();
+  const daysTotal = Math.max(1, Math.round((end - start) / 86400000));
+  const daysElapsed = Math.max(0, Math.round((now - start) / 86400000));
+  const daysLeft = Math.max(0, daysTotal - daysElapsed);
+  const progressPct = Math.min(
+    100,
+    Math.round((daysElapsed / daysTotal) * 100),
+  );
+  const doneMilestones = goalData.milestones.filter((m) => m.done).length;
+
+  return (
+    <div className="space-y-6" data-ocid="goals.panel">
+      {/* Goal card */}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide font-body mb-1">
+              Your 90-Day Goal
+            </p>
+            <p className="text-base font-bold text-foreground font-display leading-snug">
+              {goalData.goal}
+            </p>
+          </div>
+          <div className="flex gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              data-ocid="goals.edit_button"
+              onClick={() => {
+                setGoalInput(goalData.goal);
+                setTargetDate(goalData.targetDate);
+                setEditing(true);
+              }}
+              className="p-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              data-ocid="goals.delete_button"
+              onClick={clearGoal}
+              className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-xs font-body text-muted-foreground">
+            <span>{daysElapsed}d elapsed</span>
+            <span className="font-semibold text-amber-600 dark:text-amber-400">
+              {daysLeft}d remaining of {daysTotal}d
+            </span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-amber-100 dark:bg-amber-900/40 overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPct}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="h-full bg-amber-400 dark:bg-amber-500 rounded-full"
+            />
+          </div>
+          <p className="text-xs text-right text-amber-600 font-body font-semibold">
+            {progressPct}% time elapsed
+          </p>
+        </div>
+        <div className="flex gap-2 text-xs">
+          <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-full font-body">
+            <CalendarDays className="w-3 h-3 inline mr-1" />
+            Target: {new Date(goalData.targetDate).toLocaleDateString()}
+          </span>
+          {doneMilestones > 0 && (
+            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full font-body">
+              ✓ {doneMilestones}/{goalData.milestones.length} milestones done
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Milestones */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold font-body text-foreground">
+          Milestones
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            data-ocid="goals.input"
+            value={milestoneInput}
+            onChange={(e) => setMilestoneInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addMilestone();
+            }}
+            placeholder="Add a milestone…"
+            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <Button
+            size="sm"
+            data-ocid="goals.primary_button"
+            onClick={addMilestone}
+            disabled={!milestoneInput.trim()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-body gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add
+          </Button>
+        </div>
+        {goalData.milestones.length === 0 ? (
+          <div
+            data-ocid="goals.empty_state"
+            className="text-center py-8 border border-dashed border-border rounded-xl"
+          >
+            <p className="text-sm text-muted-foreground font-body">
+              No milestones yet. Break your goal into steps!
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2" data-ocid="goals.list">
+            {goalData.milestones.map((m, i) => (
+              <motion.div
+                key={`milestone-${m.text.slice(0, 20)}-${m.date}`}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                data-ocid={`goals.item.${i + 1}`}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${m.done ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-card border-border"}`}
+              >
+                <input
+                  type="checkbox"
+                  data-ocid={`goals.checkbox.${i + 1}`}
+                  checked={m.done}
+                  onChange={() => toggleMilestone(i)}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <span
+                  className={`flex-1 text-sm font-body ${m.done ? "line-through text-muted-foreground" : "text-foreground"}`}
+                >
+                  {m.text}
+                </span>
+                <button
+                  type="button"
+                  data-ocid={`goals.delete_button.${i + 1}`}
+                  onClick={() => deleteMilestone(i)}
+                  className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Weekly Wins Journal ──────────────────────────────────────────────────────
+
+interface WinEntry {
+  id: string;
+  title: string;
+  note: string;
+  date: string;
+}
+
+const WINS_KEY = "wc_weekly_wins";
+
+function WeeklyWinsTab() {
+  const [wins, setWins] = useState<WinEntry[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(WINS_KEY) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+
+  const logWin = () => {
+    if (!title.trim()) {
+      toast.error("Please enter a title for your win.");
+      return;
+    }
+    const updated = [
+      {
+        id: crypto.randomUUID(),
+        title: title.trim(),
+        note: note.trim(),
+        date: new Date().toISOString(),
+      },
+      ...wins,
+    ];
+    localStorage.setItem(WINS_KEY, JSON.stringify(updated));
+    setWins(updated);
+    setTitle("");
+    setNote("");
+    toast.success("🏆 Win logged! Keep it up!");
+  };
+
+  const deleteWin = (id: string) => {
+    const updated = wins.filter((w) => w.id !== id);
+    localStorage.setItem(WINS_KEY, JSON.stringify(updated));
+    setWins(updated);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Log Win Form */}
+      <div
+        className="bg-card rounded-xl border border-border p-5 space-y-4"
+        data-ocid="wins.panel"
+      >
+        <p className="text-sm font-semibold text-foreground font-body flex items-center gap-2">
+          <Trophy className="w-4 h-4 text-amber-500" />
+          Log a Weekly Win
+        </p>
+        <input
+          type="text"
+          data-ocid="wins.input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="What did you achieve this week? e.g. Led a successful team presentation…"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <Textarea
+          data-ocid="wins.textarea"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Optional details — what happened, what you learned, how it felt…"
+          className="min-h-[80px] text-sm font-body resize-none"
+        />
+        <div className="flex justify-end">
+          <Button
+            data-ocid="wins.submit_button"
+            onClick={logWin}
+            disabled={!title.trim()}
+            className="bg-amber-500 hover:bg-amber-600 text-white font-body font-semibold gap-2"
+          >
+            <Trophy className="w-4 h-4" />
+            Log Win
+          </Button>
+        </div>
+      </div>
+
+      {/* Wins list */}
+      {wins.length === 0 ? (
+        <div
+          data-ocid="wins.empty_state"
+          className="text-center py-16 border border-dashed border-border rounded-2xl"
+        >
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+            <Trophy className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <p className="font-body text-sm text-muted-foreground">
+            No wins logged yet.
+          </p>
+          <p className="font-body text-xs text-muted-foreground/70 mt-1 max-w-xs mx-auto">
+            Every Friday is a great time to celebrate your progress!
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3" data-ocid="wins.list">
+          {wins.map((win, i) => (
+            <motion.div
+              key={win.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              data-ocid={`wins.item.${i + 1}`}
+              className="bg-card rounded-xl border border-border p-4 flex items-start gap-3"
+            >
+              <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-body text-sm font-semibold text-foreground">
+                  {win.title}
+                </p>
+                {win.note && (
+                  <p className="font-body text-xs text-muted-foreground mt-1 leading-relaxed">
+                    {win.note}
+                  </p>
+                )}
+                <p className="font-body text-xs text-muted-foreground/60 mt-1.5">
+                  {new Date(win.date).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-ocid={`wins.delete_button.${i + 1}`}
+                onClick={() => deleteWin(win.id)}
+                className="text-muted-foreground/40 hover:text-destructive transition-colors p-1 flex-shrink-0"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SetProfileDialog({
   open,
   onOpenChange,
@@ -3726,6 +4463,12 @@ function SetProfileDialog({
     profile?.experienceLevel ?? "",
   );
   const [industry, setIndustry] = useState(profile?.industry ?? "");
+  const [voicePrefLocal, setVoicePrefLocal] = useState<string>(
+    () => localStorage.getItem("wc_voice_pref") ?? "male",
+  );
+  const [langPrefLocal, setLangPrefLocal] = useState<string>(
+    () => localStorage.getItem("wc_language_pref") ?? "English",
+  );
   const saveMutation = useSaveCallerUserProfile();
 
   useEffect(() => {
@@ -3734,6 +4477,8 @@ function SetProfileDialog({
       setRole(profile?.role ?? "");
       setExperienceLevel(profile?.experienceLevel ?? "");
       setIndustry(profile?.industry ?? "");
+      setVoicePrefLocal(localStorage.getItem("wc_voice_pref") ?? "male");
+      setLangPrefLocal(localStorage.getItem("wc_language_pref") ?? "English");
     }
   }, [open, profile]);
 
@@ -3858,6 +4603,81 @@ function SetProfileDialog({
                 {INDUSTRY_OPTIONS.map((i) => (
                   <SelectItem key={i} value={i} className="font-body">
                     {i}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium font-body flex items-center gap-1.5">
+              <Volume2 className="w-3.5 h-3.5 text-primary" />
+              AI Coach Voice
+            </Label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                data-ocid="setprofile.toggle"
+                onClick={() => {
+                  setVoicePrefLocal("male");
+                  localStorage.setItem("wc_voice_pref", "male");
+                }}
+                className={`flex-1 py-2 rounded-lg border text-sm font-body font-medium transition-all ${voicePrefLocal === "male" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 text-muted-foreground border-border hover:border-primary/50"}`}
+              >
+                🎙️ Male
+              </button>
+              <button
+                type="button"
+                data-ocid="setprofile.toggle"
+                onClick={() => {
+                  setVoicePrefLocal("female");
+                  localStorage.setItem("wc_voice_pref", "female");
+                }}
+                className={`flex-1 py-2 rounded-lg border text-sm font-body font-medium transition-all ${voicePrefLocal === "female" ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 text-muted-foreground border-border hover:border-primary/50"}`}
+              >
+                🎙️ Female
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium font-body flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-primary" />
+              Preferred Language
+            </Label>
+            <Select
+              value={langPrefLocal}
+              onValueChange={(v) => {
+                setLangPrefLocal(v);
+                localStorage.setItem("wc_language_pref", v);
+              }}
+            >
+              <SelectTrigger
+                data-ocid="setprofile.select"
+                className="font-body"
+              >
+                <SelectValue placeholder="Select language…" />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  "English",
+                  "Telugu",
+                  "Hindi",
+                  "Kannada",
+                  "Tamil",
+                  "Marathi",
+                  "Bengali",
+                  "Odia",
+                  "Spanish",
+                  "French",
+                  "Arabic",
+                  "Chinese (Mandarin)",
+                  "Portuguese",
+                  "Russian",
+                  "Japanese",
+                  "German",
+                  "Bahasa Indonesia",
+                ].map((lang) => (
+                  <SelectItem key={lang} value={lang} className="font-body">
+                    {lang}
                   </SelectItem>
                 ))}
               </SelectContent>
